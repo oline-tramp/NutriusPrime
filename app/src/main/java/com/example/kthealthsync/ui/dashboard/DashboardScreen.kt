@@ -10,7 +10,10 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -18,6 +21,18 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.zIndex
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
@@ -384,6 +399,9 @@ fun DashboardScreen(
                             onSingleDelete = { id ->
                                 singleDeleteTargetId = id
                                 showDeleteDialog = true
+                            },
+                            onMoveFoodToMeal = { id, targetMealTimeId ->
+                                viewModel.moveEntries(setOf(id), targetMealTimeId, null)
                             }
                         )
 
@@ -727,6 +745,12 @@ fun ShareOptionsDialog(
     )
 }
 
+data class DraggedFoodState(
+    val food: Foodstuff,
+    val sourceMealTimeId: String,
+    val rootPointer: Offset
+)
+
 @Composable
 fun DailyDiarySpoiler(
     diaryResponse: DiaryResponse?,
@@ -734,9 +758,14 @@ fun DailyDiarySpoiler(
     onToggleSelect: (String) -> Unit,
     onAddFoodClick: (mealTimeGuid: String?) -> Unit,
     onSingleMove: (String) -> Unit,
-    onSingleDelete: (String) -> Unit
+    onSingleDelete: (String) -> Unit,
+    onMoveFoodToMeal: (foodId: String, targetMealTimeId: String) -> Unit
 ) {
     var isDiaryExpanded by remember { mutableStateOf(true) }
+    var draggedFoodState by remember { mutableStateOf<DraggedFoodState?>(null) }
+    val mealBounds = remember { mutableStateMapOf<String, Rect>() }
+    var spoilerCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    val haptic = LocalHapticFeedback.current
 
     val mealTimes = diaryResponse?.data?.times ?: emptyList()
     val allFoods = remember(diaryResponse) {
@@ -746,132 +775,246 @@ fun DailyDiarySpoiler(
         allFoods.sumOf { NutrientUtils.parseNutrient(it.energy) }
     }
 
-    Card(
+    val hoveredMealId = remember(draggedFoodState?.rootPointer) {
+        val pointer = draggedFoodState?.rootPointer ?: return@remember null
+        mealBounds.entries.find { (_, rect) -> rect.contains(pointer) }?.key
+    }
+
+    LaunchedEffect(hoveredMealId) {
+        if (hoveredMealId != null && hoveredMealId != draggedFoodState?.sourceMealTimeId) {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        }
+    }
+
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A1A)),
-        border = BorderStroke(1.dp, Color(0xFF2C2C2C))
+            .onGloballyPositioned { spoilerCoordinates = it }
     ) {
-        Column(
+        Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp)
+                .padding(vertical = 8.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A1A)),
+            border = BorderStroke(1.dp, Color(0xFF2C2C2C))
         ) {
-            // Spoiler Header Panel
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { isDiaryExpanded = !isDiaryExpanded }
-                    .padding(vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(12.dp)
             ) {
-                Text("🍽️", fontSize = 20.sp)
-                Spacer(modifier = Modifier.width(8.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "Приёмы пищи",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp,
-                            color = Color.White
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = Color(0xFF2A2A2A)
-                        ) {
-                            Text(
-                                text = "${allFoods.size}",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
-                    }
-                    if (allFoods.isNotEmpty()) {
-                        Text(
-                            text = "Всего: ${totalKcal.toInt()} ккал",
-                            fontSize = 12.sp,
-                            color = Color.Gray
-                        )
-                    }
-                }
-
-                // Add button on the spoiler header
-                Button(
-                    onClick = { onAddFoodClick(null) },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = Color.Black
-                    ),
-                    shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                    modifier = Modifier.height(34.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = "Добавить продукт",
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "Добавить",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(4.dp))
-
-                IconButton(
-                    onClick = { isDiaryExpanded = !isDiaryExpanded },
-                    modifier = Modifier.size(34.dp)
-                ) {
-                    Icon(
-                        imageVector = if (isDiaryExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                        contentDescription = if (isDiaryExpanded) "Свернуть" else "Развернуть",
-                        tint = Color.LightGray
-                    )
-                }
-            }
-
-            // Expanded content
-            AnimatedVisibility(visible = isDiaryExpanded) {
-                Column(
+                // Spoiler Header Panel
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 10.dp)
+                        .clickable { isDiaryExpanded = !isDiaryExpanded }
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (mealTimes.isEmpty()) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 16.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
+                    Text("🍽️", fontSize = 20.sp)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = "Нет данных дневника за этот день",
-                                color = Color.Gray,
-                                fontSize = 13.sp
+                                text = "Приёмы пищи",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp,
+                                color = Color.White
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = Color(0xFF2A2A2A)
+                            ) {
+                                Text(
+                                    text = "${allFoods.size}",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                        if (allFoods.isNotEmpty()) {
+                            Text(
+                                text = "Всего: ${totalKcal.toInt()} ккал",
+                                fontSize = 12.sp,
+                                color = Color.Gray
                             )
                         }
-                    } else {
-                        mealTimes.forEach { mealTime ->
-                            MealTimeGroup(
-                                mealTime = mealTime,
-                                selectedEntryIds = selectedEntryIds,
-                                onToggleSelect = onToggleSelect,
-                                onAddFoodClick = {
-                                    onAddFoodClick(mealTime.id)
-                                },
-                                onSingleMove = onSingleMove,
-                                onSingleDelete = onSingleDelete
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
+                    }
+
+                    // Add button on the spoiler header
+                    Button(
+                        onClick = { onAddFoodClick(null) },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = Color.Black
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier.height(34.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Добавить продукт",
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Добавить",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    IconButton(
+                        onClick = { isDiaryExpanded = !isDiaryExpanded },
+                        modifier = Modifier.size(34.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isDiaryExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = if (isDiaryExpanded) "Свернуть" else "Развернуть",
+                            tint = Color.LightGray
+                        )
+                    }
+                }
+
+                // Expanded content
+                AnimatedVisibility(visible = isDiaryExpanded) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 10.dp)
+                    ) {
+                        if (mealTimes.isEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 16.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "Нет данных дневника за этот день",
+                                    color = Color.Gray,
+                                    fontSize = 13.sp
+                                )
+                            }
+                        } else {
+                            mealTimes.forEach { mealTime ->
+                                val isDropTarget = hoveredMealId == mealTime.id && hoveredMealId != draggedFoodState?.sourceMealTimeId
+
+                                MealTimeGroup(
+                                    mealTime = mealTime,
+                                    selectedEntryIds = selectedEntryIds,
+                                    onToggleSelect = onToggleSelect,
+                                    onAddFoodClick = {
+                                        onAddFoodClick(mealTime.id)
+                                    },
+                                    onSingleMove = onSingleMove,
+                                    onSingleDelete = onSingleDelete,
+                                    isDropTarget = isDropTarget,
+                                    onPositioned = { rect ->
+                                        mealBounds[mealTime.id ?: ""] = rect
+                                    },
+                                    onStartDrag = { food, rootPointer ->
+                                        draggedFoodState = DraggedFoodState(
+                                            food = food,
+                                            sourceMealTimeId = mealTime.id ?: "",
+                                            rootPointer = rootPointer
+                                        )
+                                    },
+                                    onDrag = { dragAmount ->
+                                        draggedFoodState?.let { current ->
+                                            draggedFoodState = current.copy(rootPointer = current.rootPointer + dragAmount)
+                                        }
+                                    },
+                                    onDragEnd = {
+                                        val currentDrag = draggedFoodState
+                                        val targetMeal = hoveredMealId
+                                        if (currentDrag != null && targetMeal != null && targetMeal != currentDrag.sourceMealTimeId) {
+                                            val foodId = currentDrag.food.id
+                                            if (!foodId.isNullOrBlank()) {
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                onMoveFoodToMeal(foodId, targetMeal)
+                                            }
+                                        }
+                                        draggedFoodState = null
+                                    },
+                                    onDragCancel = {
+                                        draggedFoodState = null
+                                    },
+                                    draggedFoodId = draggedFoodState?.food?.id
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                            }
                         }
+                    }
+                }
+            }
+        }
+
+        // Floating Ghost Card Overlay
+        draggedFoodState?.let { dragInfo ->
+            val spoilerRoot = spoilerCoordinates?.localToRoot(Offset.Zero) ?: Offset.Zero
+            val localOffset = dragInfo.rootPointer - spoilerRoot
+            val title = dragInfo.food.title ?: dragInfo.food.name ?: dragInfo.food.nazev ?: "Продукт"
+            val kcal = NutrientUtils.parseNutrient(dragInfo.food.energy).toInt()
+            val isOverValidTarget = hoveredMealId != null && hoveredMealId != dragInfo.sourceMealTimeId
+
+            Box(
+                modifier = Modifier
+                    .zIndex(100f)
+                    .graphicsLayer {
+                        translationX = localOffset.x - 130.dp.toPx()
+                        translationY = localOffset.y - 35.dp.toPx()
+                        rotationZ = 3f
+                        scaleX = 1.05f
+                        scaleY = 1.05f
+                        shadowElevation = 20.dp.toPx()
+                    }
+                    .width(260.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xFF1E2638))
+                    .border(
+                        BorderStroke(
+                            width = 1.5.dp,
+                            color = if (isOverValidTarget) Color(0xFF64B5F6) else Color(0xFF9E9E9E)
+                        ),
+                        RoundedCornerShape(14.dp)
+                    )
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+            ) {
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("✨", fontSize = 13.sp)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = title,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "$kcal ккал",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFFFFD54F)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (isOverValidTarget) "Отпустите для переноса 📥" else "Перетащите на нужный приём",
+                            fontSize = 11.sp,
+                            color = if (isOverValidTarget) Color(0xFF90CAF9) else Color.LightGray
+                        )
                     }
                 }
             }
@@ -886,7 +1029,14 @@ fun MealTimeGroup(
     onToggleSelect: (String) -> Unit,
     onAddFoodClick: () -> Unit,
     onSingleMove: (String) -> Unit,
-    onSingleDelete: (String) -> Unit
+    onSingleDelete: (String) -> Unit,
+    isDropTarget: Boolean,
+    onPositioned: (Rect) -> Unit,
+    onStartDrag: (food: Foodstuff, rootPointer: Offset) -> Unit,
+    onDrag: (dragAmount: Offset) -> Unit,
+    onDragEnd: () -> Unit,
+    onDragCancel: () -> Unit,
+    draggedFoodId: String?
 ) {
     val foods = mealTime.foodstuff ?: emptyList()
     var isExpanded by remember(mealTime.id) { mutableStateOf(foods.isNotEmpty()) }
@@ -898,10 +1048,17 @@ fun MealTimeGroup(
     }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .onGloballyPositioned { onPositioned(it.boundsInRoot()) },
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF141414)),
-        border = BorderStroke(1.dp, Color(0xFF222222))
+        colors = CardDefaults.cardColors(
+            containerColor = if (isDropTarget) Color(0xFF132238) else Color(0xFF141414)
+        ),
+        border = BorderStroke(
+            width = if (isDropTarget) 2.dp else 1.dp,
+            color = if (isDropTarget) Color(0xFF64B5F6) else Color(0xFF222222)
+        )
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             // Meal Header
@@ -965,6 +1122,31 @@ fun MealTimeGroup(
                 }
             }
 
+            // Drop indicator when an item is hovered over this meal
+            AnimatedVisibility(visible = isDropTarget) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF1565C0).copy(alpha = 0.25f))
+                        .border(BorderStroke(1.dp, Color(0xFF64B5F6).copy(alpha = 0.6f)), RoundedCornerShape(8.dp))
+                        .padding(vertical = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("📥", fontSize = 13.sp)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Переместить в $mealDisplayName",
+                            color = Color(0xFF90CAF9),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+
             // Foods List inside Meal
             AnimatedVisibility(visible = isExpanded) {
                 Column(
@@ -983,10 +1165,12 @@ fun MealTimeGroup(
                         foods.forEachIndexed { index, food ->
                             val foodId = food.id ?: ""
                             val isSelected = selectedEntryIds.contains(foodId)
+                            val isBeingDragged = draggedFoodId == foodId
 
                             FoodEntryRow(
                                 food = food,
                                 isSelected = isSelected,
+                                isBeingDragged = isBeingDragged,
                                 onToggleSelect = {
                                     if (foodId.isNotBlank()) onToggleSelect(foodId)
                                 },
@@ -995,7 +1179,13 @@ fun MealTimeGroup(
                                 },
                                 onDelete = {
                                     if (foodId.isNotBlank()) onSingleDelete(foodId)
-                                }
+                                },
+                                onStartDrag = { rootPointer ->
+                                    onStartDrag(food, rootPointer)
+                                },
+                                onDrag = onDrag,
+                                onDragEnd = onDragEnd,
+                                onDragCancel = onDragCancel
                             )
 
                             if (index < foods.lastIndex) {
@@ -1017,9 +1207,14 @@ fun MealTimeGroup(
 fun FoodEntryRow(
     food: Foodstuff,
     isSelected: Boolean,
+    isBeingDragged: Boolean,
     onToggleSelect: () -> Unit,
     onMove: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onStartDrag: (rootPointer: Offset) -> Unit,
+    onDrag: (dragAmount: Offset) -> Unit,
+    onDragEnd: () -> Unit,
+    onDragCancel: () -> Unit
 ) {
     val title = food.title ?: food.name ?: food.nazev ?: "Без названия"
     val energyKcal = NutrientUtils.parseNutrient(food.energy).toInt()
@@ -1027,9 +1222,15 @@ fun FoodEntryRow(
     val fat = NutrientUtils.parseNutrient(food.fat).toInt()
     val carbs = NutrientUtils.parseNutrient(food.carbohydrate).toInt()
 
+    var handleCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    val haptic = LocalHapticFeedback.current
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .graphicsLayer {
+                alpha = if (isBeingDragged) 0.25f else 1f
+            }
             .clickable { onToggleSelect() }
             .padding(vertical = 6.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -1083,19 +1284,52 @@ fun FoodEntryRow(
             }
         }
 
-        // Action Buttons: Move & Delete
+        // Action Buttons: Drag handle (sandwich) & Delete
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(
-                onClick = onMove,
-                modifier = Modifier.size(30.dp)
+            // Drag Handle / Move Button
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .onGloballyPositioned { handleCoordinates = it }
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (isBeingDragged) Color(0xFF1E3A5F) else Color.Transparent)
+                    .pointerInput(food.id) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = { localOffset ->
+                                val rootStart = handleCoordinates?.localToRoot(localOffset) ?: Offset.Zero
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onStartDrag(rootStart)
+                            },
+                            onDrag = { change, dragAmount ->
+                                change.consume()
+                                onDrag(dragAmount)
+                            },
+                            onDragEnd = { onDragEnd() },
+                            onDragCancel = { onDragCancel() }
+                        )
+                    }
+                    .clickable { onMove() },
+                contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                    contentDescription = "Перенести",
-                    tint = Color(0xFF64B5F6),
-                    modifier = Modifier.size(16.dp)
-                )
+                Canvas(modifier = Modifier.size(16.dp, 12.dp)) {
+                    val barHeight = 2.dp.toPx()
+                    val barSpacing = 3.dp.toPx()
+                    val corner = CornerRadius(barHeight / 2f, barHeight / 2f)
+                    val barColor = if (isBeingDragged) Color(0xFF64B5F6) else Color(0xFF90CAF9)
+                    for (i in 0..2) {
+                        val y = i * (barHeight + barSpacing)
+                        drawRoundRect(
+                            color = barColor,
+                            topLeft = Offset(0f, y),
+                            size = Size(size.width, barHeight),
+                            cornerRadius = corner
+                        )
+                    }
+                }
             }
+
+            Spacer(modifier = Modifier.width(2.dp))
+
             IconButton(
                 onClick = onDelete,
                 modifier = Modifier.size(30.dp)
