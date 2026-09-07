@@ -391,6 +391,7 @@ fun DashboardScreen(
                         DailyDiarySpoiler(
                             diaryResponse = state.diaryResponse,
                             selectedEntryIds = selectedEntryIds,
+                            dateStr = selectedDate.format(DateTimeFormatter.ISO_LOCAL_DATE),
                             onToggleSelect = { id ->
                                 selectedEntryIds = if (selectedEntryIds.contains(id)) selectedEntryIds - id else selectedEntryIds + id
                             },
@@ -758,13 +759,14 @@ data class DraggedFoodState(
 fun DailyDiarySpoiler(
     diaryResponse: DiaryResponse?,
     selectedEntryIds: Set<String>,
+    dateStr: String = "",
     onToggleSelect: (String) -> Unit,
     onAddFoodClick: (mealTimeGuid: String?) -> Unit,
     onSingleMove: (String) -> Unit,
     onSingleDelete: (String) -> Unit,
     onMoveFoodToMeal: (foodId: String, targetMealTimeId: String) -> Unit
 ) {
-    var isDiaryExpanded by rememberSaveable { mutableStateOf(true) }
+    var isDiaryExpanded by rememberSaveable(dateStr) { mutableStateOf(true) }
     var draggedFoodState by remember { mutableStateOf<DraggedFoodState?>(null) }
     val mealBounds = remember { mutableStateMapOf<String, Rect>() }
     var spoilerCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
@@ -776,6 +778,14 @@ fun DailyDiarySpoiler(
     }
     val totalKcal = remember(allFoods) {
         allFoods.sumOf { NutrientUtils.parseNutrient(it.energy) }
+    }
+
+    var prevTotalFoodCount by remember(dateStr) { mutableIntStateOf(allFoods.size) }
+    LaunchedEffect(allFoods.size) {
+        if (allFoods.size > prevTotalFoodCount) {
+            isDiaryExpanded = true
+        }
+        prevTotalFoodCount = allFoods.size
     }
 
     val hoveredMealId = remember(draggedFoodState?.rootPointer) {
@@ -946,6 +956,7 @@ fun DailyDiarySpoiler(
                                 MealTimeGroup(
                                     mealTime = mealTime,
                                     selectedEntryIds = selectedEntryIds,
+                                    dateStr = dateStr,
                                     onToggleSelect = onToggleSelect,
                                     onAddFoodClick = {
                                         onAddFoodClick(mealTime.id)
@@ -1051,6 +1062,7 @@ fun DailyDiarySpoiler(
 fun MealTimeGroup(
     mealTime: MealTime,
     selectedEntryIds: Set<String>,
+    dateStr: String = "",
     onToggleSelect: (String) -> Unit,
     onAddFoodClick: () -> Unit,
     onSingleMove: (String) -> Unit,
@@ -1064,7 +1076,15 @@ fun MealTimeGroup(
     draggedFoodId: String?
 ) {
     val foods = mealTime.foodstuff ?: emptyList()
-    var isExpanded by rememberSaveable(mealTime.id) { mutableStateOf(foods.isNotEmpty()) }
+    var isExpanded by rememberSaveable(mealTime.id, dateStr) { mutableStateOf(foods.isNotEmpty()) }
+    var prevFoodCount by remember(mealTime.id, dateStr) { mutableIntStateOf(foods.size) }
+
+    LaunchedEffect(foods.size) {
+        if (foods.size > prevFoodCount) {
+            isExpanded = true
+        }
+        prevFoodCount = foods.size
+    }
     val mealKcal = remember(foods) {
         foods.sumOf { NutrientUtils.parseNutrient(it.energy) }
     }
