@@ -1,5 +1,6 @@
 package com.example.kthealthsync
 
+import com.example.kthealthsync.domain.util.NutrientUtils
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -34,7 +35,15 @@ class KalorickeIntegrationTest {
         val api = RetrofitClient.instance
         
         // 1. Fetch meal list
-        val mealListResp = api.getMealList(cookie)
+        val mealListResp = try {
+            api.getMealList(cookie)
+        } catch (e: retrofit2.HttpException) {
+            if (e.code() == 302 || e.code() == 401) {
+                org.junit.Assume.assumeTrue("Live session expired (HTTP ${e.code()}). Update KALORICKE_COOKIE in local.properties to run live integration test.", false)
+                return@runBlocking
+            }
+            throw e
+        }
         val mealMap = mutableMapOf<String, String>()
         mealListResp.data?.forEach { item ->
             val title = item.title
@@ -69,8 +78,8 @@ class KalorickeIntegrationTest {
         val recipeData = api.getRecipeDetail(borshGuid!!, cookie).data
         assertNotNull("Failed to fetch recipe details for Borsh!", recipeData)
         
-        val recipeEnergy = parseNutrient(recipeData!!.energy)
-        val loggedEnergy = parseNutrient(borshRaw.energy)
+        val recipeEnergy = NutrientUtils.parseNutrient(recipeData!!.energy)
+        val loggedEnergy = NutrientUtils.parseNutrient(borshRaw.energy)
         println("Recipe total energy: $recipeEnergy kcal. Logged energy: $loggedEnergy kcal")
         
         val scale = if (recipeEnergy > 0) loggedEnergy / recipeEnergy else 1.0
@@ -80,14 +89,14 @@ class KalorickeIntegrationTest {
             val compFood = item.foodstuff
             if (compFood != null) {
                 compFood.copy(
-                    protein = scaleNutrient(compFood.protein, scale),
-                    fat = scaleNutrient(compFood.fat, scale),
-                    carbohydrate = scaleNutrient(compFood.carbohydrate, scale),
-                    sugar = scaleNutrient(compFood.sugar, scale),
-                    salt = scaleNutrient(compFood.salt, scale),
-                    fiber = scaleNutrient(compFood.fiber, scale),
-                    water = scaleNutrient(compFood.water, scale),
-                    energy = scaleNutrient(compFood.energy, scale)
+                    protein = NutrientUtils.scaleNutrient(compFood.protein, scale),
+                    fat = NutrientUtils.scaleNutrient(compFood.fat, scale),
+                    carbohydrate = NutrientUtils.scaleNutrient(compFood.carbohydrate, scale),
+                    sugar = NutrientUtils.scaleNutrient(compFood.sugar, scale),
+                    salt = NutrientUtils.scaleNutrient(compFood.salt, scale),
+                    fiber = NutrientUtils.scaleNutrient(compFood.fiber, scale),
+                    water = NutrientUtils.scaleNutrient(compFood.water, scale),
+                    energy = NutrientUtils.scaleNutrient(compFood.energy, scale)
                 )
             } else null
         }
@@ -96,7 +105,7 @@ class KalorickeIntegrationTest {
         
         // 6. Test aggregation
         val allFoods = listOf(enrichedBorsh)
-        val proteinBreakdown = aggregateMacro(allFoods, { parseNutrient(it.protein) }, withMeals = true)
+        val proteinBreakdown = NutrientUtils.aggregateMacro(allFoods, { NutrientUtils.parseNutrient(it.protein) }, withMeals = true)
         
         println("Protein Breakdown:")
         proteinBreakdown.forEach { breakdown ->
@@ -107,7 +116,7 @@ class KalorickeIntegrationTest {
         }
         
         val totalBorshProteinFromComponents = proteinBreakdown.first().components.sumOf { it.amount }
-        val borshLoggedProtein = parseNutrient(borshRaw.protein)
+        val borshLoggedProtein = NutrientUtils.parseNutrient(borshRaw.protein)
         
         println("Borsh logged protein: $borshLoggedProtein. Sum of components: $totalBorshProteinFromComponents")
         

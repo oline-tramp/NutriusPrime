@@ -26,7 +26,10 @@ data class DiaryData(
 )
 
 data class MealTime(
-    val foodstuff: List<Foodstuff>?
+    val title: String? = null,
+    val name: String? = null,
+    val id: String? = null,
+    val foodstuff: List<Foodstuff>? = null
 )
 
 data class Foodstuff(
@@ -47,7 +50,8 @@ data class Foodstuff(
     val components: List<Foodstuff>?,
     val guid: String?,
     val guidRecipe: String?,
-    val isRecipe: Boolean?
+    val isRecipe: Boolean?,
+    val unit: String? = null
 )
 
 data class MealListResponse(
@@ -133,6 +137,27 @@ data class AddFoodResponse(
     val message: String?
 )
 
+data class OwnNutrientItem(
+    val code: String?,
+    val title: String?,
+    val value: Double?,
+    val computedValue: String?,
+    val active: Boolean?
+)
+
+data class UserProfileFormData(
+    val ownTargetEnergy: Double?,
+    val computedTargetEnergy: String?,
+    val drinkRegime: Double?,
+    val ownNutrients: List<OwnNutrientItem>?
+)
+
+data class UserProfileFormResponse(
+    val code: Int?,
+    val message: String?,
+    val data: UserProfileFormData?
+)
+
 interface KalorickeApiService {
     @GET("user/diary/{date}/get?format=json")
     suspend fun getDiary(
@@ -166,8 +191,10 @@ interface KalorickeApiService {
         @Header("Accept") accept: String = "application/json, text/plain, */*"
     ): RecipeDetailResponse
 
-        @GET("autocomplete/frequent-foodstuff?format=json")
+    @GET("autocomplete/frequent-foodstuff?format=json")
     suspend fun getFrequentFoodstuff(
+        @retrofit2.http.Query("page") page: Int = 0,
+        @retrofit2.http.Query("limit") limit: Int = 10,
         @Header("Cookie") cookie: String,
         @Header("User-Agent") userAgent: String = "Mozilla/5.0",
         @Header("Accept") accept: String = "application/json"
@@ -175,6 +202,8 @@ interface KalorickeApiService {
 
     @GET("autocomplete/favorites?format=json")
     suspend fun getFavoriteFoodstuff(
+        @retrofit2.http.Query("page") page: Int = 0,
+        @retrofit2.http.Query("limit") limit: Int = 10,
         @Header("Cookie") cookie: String,
         @Header("User-Agent") userAgent: String = "Mozilla/5.0",
         @Header("Accept") accept: String = "application/json"
@@ -182,6 +211,8 @@ interface KalorickeApiService {
 
     @GET("autocomplete/meals?format=json")
     suspend fun getMyMeals(
+        @retrofit2.http.Query("page") page: Int = 0,
+        @retrofit2.http.Query("limit") limit: Int = 10,
         @Header("Cookie") cookie: String,
         @Header("User-Agent") userAgent: String = "Mozilla/5.0",
         @Header("Accept") accept: String = "application/json"
@@ -198,6 +229,7 @@ interface KalorickeApiService {
     @GET("autocomplete/foodstuff-activity-meal?format=json")
     suspend fun searchFood(
         @retrofit2.http.Query("query") query: String,
+        @retrofit2.http.Query("page") page: Int = 0,
         @Header("Cookie") cookie: String,
         @Header("User-Agent") userAgent: String = "Mozilla/5.0 (Linux; Android 14; Pixel 7 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
         @Header("Accept") accept: String = "application/json, text/plain, */*"
@@ -217,6 +249,14 @@ interface KalorickeApiService {
         @Header("Cookie") cookie: String,
         @Header("User-Agent") userAgent: String = "Mozilla/5.0"
     ): ResponseBody
+
+    @GET("user/settings/profile/form?format=json")
+    suspend fun getUserProfileForm(
+        @Header("Cookie") cookie: String,
+        @Header("User-Agent") userAgent: String = "Mozilla/5.0 (Linux; Android 14; Pixel 7 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        @Header("Accept") accept: String = "application/json, text/plain, */*",
+        @Header("Accept-Encoding") acceptEncoding: String = "identity"
+    ): UserProfileFormResponse
 }
 
 suspend fun KalorickeApiService.getDiaryWithAutoLogin(
