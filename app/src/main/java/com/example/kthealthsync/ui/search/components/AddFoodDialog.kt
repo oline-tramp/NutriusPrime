@@ -42,6 +42,7 @@ private fun formatAmount(value: Double): String {
 fun AddFoodDialog(
     item: AutocompleteResponseItem,
     date: String,
+    initialMealTimeGuid: String? = null,
     currentKcal: Double,
     currentProtein: Double,
     currentCarbs: Double,
@@ -71,8 +72,8 @@ fun AddFoodDialog(
     var selectedUnit by remember { mutableStateOf<FoodFormUnitOption?>(null) }
     var amountText by remember { mutableStateOf("") }
     var actualDefaultBaseAmount by remember { mutableStateOf(1.0) }
-    var selectedTimeGuid by remember(date) {
-        mutableStateOf(NutrientUtils.getDefaultMealTimeGuid(date, timeOptions))
+    var selectedTimeGuid by remember(date, initialMealTimeGuid) {
+        mutableStateOf(initialMealTimeGuid ?: NutrientUtils.getDefaultMealTimeGuid(date, timeOptions))
     }
 
     var isLoadingOptions by remember { mutableStateOf(true) }

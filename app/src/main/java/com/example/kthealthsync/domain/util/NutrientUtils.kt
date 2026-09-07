@@ -2,6 +2,7 @@ package com.example.kthealthsync.domain.util
 
 import com.example.kthealthsync.DiaryResponse
 import com.example.kthealthsync.Foodstuff
+import com.example.kthealthsync.MealTime
 import com.example.kthealthsync.domain.model.DailySummary
 import com.example.kthealthsync.domain.model.FoodBreakdown
 import com.example.kthealthsync.domain.model.FoodCategory
@@ -743,5 +744,26 @@ object NutrientUtils {
         }.coerceIn(0, options.lastIndex)
 
         return options[targetIndex].first
+    }
+
+    val STANDARD_MEAL_OPTIONS = listOf(
+        "1" to "Завтрак (Snídaně)",
+        "2" to "Второй завтрак (Dopolední svačina)",
+        "3" to "Обед (Oběd)",
+        "4" to "Полдник (Odpolední svačina)",
+        "5" to "Ужин (Večeře)",
+        "6" to "Второй ужин (Druhá večeře)"
+    )
+
+    fun getMealTimeDisplayName(mealTime: MealTime): String {
+        return when (mealTime.id) {
+            "1" -> "Завтрак"
+            "2" -> "Второй завтрак"
+            "3" -> "Обед"
+            "4" -> "Полдник"
+            "5" -> "Ужин"
+            "6" -> "Второй ужин"
+            else -> mealTime.title ?: mealTime.name ?: "Приём пищи"
+        }
     }
 }

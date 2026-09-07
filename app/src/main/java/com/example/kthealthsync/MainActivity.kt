@@ -54,6 +54,7 @@ class MainActivity : ComponentActivity() {
             ) {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     var currentScreen by remember { mutableStateOf("dashboard") }
+                    var preselectedMealTimeGuid by remember { mutableStateOf<String?>(null) }
                     val selectedDate by dashboardViewModel.selectedDate.collectAsState()
                     val dashboardUiState by dashboardViewModel.uiState.collectAsState()
 
@@ -63,7 +64,10 @@ class MainActivity : ComponentActivity() {
                                 viewModel = dashboardViewModel,
                                 onSettingsClick = { currentScreen = "settings" },
                                 onDebugClick = { currentScreen = "debug" },
-                                onAddFoodClick = { currentScreen = "search" }
+                                onAddFoodClick = { mealTimeGuid ->
+                                    preselectedMealTimeGuid = mealTimeGuid
+                                    currentScreen = "search"
+                                }
                             )
                         }
                         "search" -> {
@@ -71,6 +75,7 @@ class MainActivity : ComponentActivity() {
                             val summary = (dashboardUiState as? DashboardUiState.Success)?.summary
                             SearchScreen(
                                 date = formattedDate,
+                                preselectedMealTimeGuid = preselectedMealTimeGuid,
                                 currentKcal = summary?.kcal ?: 0.0,
                                 currentProtein = summary?.protein ?: 0.0,
                                 currentCarbs = summary?.carb ?: 0.0,
@@ -78,8 +83,12 @@ class MainActivity : ComponentActivity() {
                                 currentFiber = summary?.fiber ?: 0.0,
                                 currentSugar = summary?.sugar ?: 0.0,
                                 currentSalt = summary?.salt ?: 0.0,
-                                onBack = { currentScreen = "dashboard" },
+                                onBack = {
+                                    preselectedMealTimeGuid = null
+                                    currentScreen = "dashboard"
+                                },
                                 onFoodAdded = {
+                                    preselectedMealTimeGuid = null
                                     dashboardViewModel.refresh()
                                     currentScreen = "dashboard"
                                 }

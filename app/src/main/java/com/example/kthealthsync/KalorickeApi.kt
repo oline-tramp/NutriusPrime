@@ -33,25 +33,28 @@ data class MealTime(
 )
 
 data class Foodstuff(
-    val title: String?,
-    val name: String?,
-    val nazev: String?,
-    val energy: String?,
-    val protein: String?,
-    val carbohydrate: String?,
-    val fat: String?,
-    val sugar: String?,
-    val salt: String?,
-    val water: String?,
-    val fiber: String?,
-    val foodstuff: List<Foodstuff>?,
-    val items: List<Foodstuff>?,
-    val ingredients: List<Foodstuff>?,
-    val components: List<Foodstuff>?,
-    val guid: String?,
-    val guidRecipe: String?,
-    val isRecipe: Boolean?,
-    val unit: String? = null
+    val title: String? = null,
+    val name: String? = null,
+    val nazev: String? = null,
+    val energy: String? = null,
+    val protein: String? = null,
+    val carbohydrate: String? = null,
+    val fat: String? = null,
+    val sugar: String? = null,
+    val salt: String? = null,
+    val water: String? = null,
+    val fiber: String? = null,
+    val foodstuff: List<Foodstuff>? = null,
+    val items: List<Foodstuff>? = null,
+    val ingredients: List<Foodstuff>? = null,
+    val components: List<Foodstuff>? = null,
+    val guid: String? = null,
+    val guidRecipe: String? = null,
+    val isRecipe: Boolean? = null,
+    val unit: String? = null,
+    val id: String? = null,
+    val guidType: String? = null,
+    val type: String? = null
 )
 
 data class MealListResponse(
@@ -133,6 +136,11 @@ data class AddFoodRequest(
 )
 
 data class AddFoodResponse(
+    val code: Int?,
+    val message: String?
+)
+
+data class DiaryActionResponse(
     val code: Int?,
     val message: String?
 )
@@ -257,6 +265,24 @@ interface KalorickeApiService {
         @Header("Accept") accept: String = "application/json, text/plain, */*",
         @Header("Accept-Encoding") acceptEncoding: String = "identity"
     ): UserProfileFormResponse
+
+    @GET("user/diary/foodstuff/delete/{ids}?format=json")
+    suspend fun deleteFoodstuffDiary(
+        @Path("ids") ids: String,
+        @Header("Cookie") cookie: String,
+        @Header("User-Agent") userAgent: String = "Mozilla/5.0 (Linux; Android 14; Pixel 7 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        @Header("Accept") accept: String = "application/json, text/plain, */*"
+    ): DiaryActionResponse
+
+    @GET("user/diary/{id}/{timeId}/{date}/dragndrop?format=json")
+    suspend fun moveFoodstuffDiary(
+        @Path("id") id: String,
+        @Path("timeId") timeId: String,
+        @Path("date") date: String,
+        @Header("Cookie") cookie: String,
+        @Header("User-Agent") userAgent: String = "Mozilla/5.0 (Linux; Android 14; Pixel 7 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        @Header("Accept") accept: String = "application/json, text/plain, */*"
+    ): DiaryActionResponse
 }
 
 suspend fun KalorickeApiService.getDiaryWithAutoLogin(

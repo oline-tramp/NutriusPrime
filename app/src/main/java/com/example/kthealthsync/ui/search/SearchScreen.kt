@@ -28,6 +28,7 @@ import com.example.kthealthsync.ui.search.components.AddFoodDialog
 @Composable
 fun SearchScreen(
     date: String,
+    preselectedMealTimeGuid: String? = null,
     currentKcal: Double,
     currentProtein: Double,
     currentCarbs: Double,
@@ -190,6 +191,7 @@ fun SearchScreen(
         AddFoodDialog(
             item = selectedItem!!,
             date = date,
+            initialMealTimeGuid = preselectedMealTimeGuid,
             currentKcal = currentKcal,
             currentProtein = currentProtein,
             currentCarbs = currentCarbs,

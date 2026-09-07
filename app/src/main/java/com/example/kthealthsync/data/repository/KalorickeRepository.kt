@@ -437,4 +437,45 @@ class KalorickeRepository(
             null
         }
     }
+
+    suspend fun deleteDiaryEntries(ids: Collection<String>): Result<Unit> {
+        val cookie = getCookie()
+        if (cookie.isBlank()) return Result.failure(IllegalStateException("No cookie available"))
+        val validIds = ids.filter { it.isNotBlank() }
+        if (validIds.isEmpty()) return Result.success(Unit)
+
+        return try {
+            val joined = validIds.joinToString(",")
+            val resp = api.deleteFoodstuffDiary(joined, cookie)
+            DebugLogger.addActionLog("Deleted ${validIds.size} diary entries: $joined (code=${resp.code}, msg=${resp.message})")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            DebugLogger.addActionLog("Failed to delete diary entries: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    suspend fun moveDiaryEntries(
+        ids: Collection<String>,
+        targetTimeId: String,
+        targetDate: String? = null
+    ): Result<Unit> {
+        val cookie = getCookie()
+        if (cookie.isBlank()) return Result.failure(IllegalStateException("No cookie available"))
+        val validIds = ids.filter { it.isNotBlank() }
+        if (validIds.isEmpty()) return Result.success(Unit)
+
+        val dateParam = targetDate?.takeIf { it.isNotBlank() } ?: "0"
+
+        return try {
+            for (id in validIds) {
+                val resp = api.moveFoodstuffDiary(id, targetTimeId, dateParam, cookie)
+                DebugLogger.addActionLog("Moved diary entry $id to time=$targetTimeId, date=$dateParam (code=${resp.code})")
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            DebugLogger.addActionLog("Failed to move diary entries: ${e.message}")
+            Result.failure(e)
+        }
+    }
 }

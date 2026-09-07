@@ -3,6 +3,12 @@ package com.example.kthealthsync.ui.dashboard
 import android.app.DatePickerDialog
 import android.content.Intent
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -10,13 +16,18 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
@@ -27,19 +38,22 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.AnnotatedString
+import com.example.kthealthsync.DiaryResponse
+import com.example.kthealthsync.Foodstuff
+import com.example.kthealthsync.MealTime
 import com.example.kthealthsync.domain.model.DailySummary
 import com.example.kthealthsync.domain.model.FoodBreakdown
 import com.example.kthealthsync.domain.model.ShareFormatType
 import com.example.kthealthsync.domain.util.NutrientUtils
+import java.time.LocalDate
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -50,7 +64,7 @@ fun DashboardScreen(
     viewModel: DashboardViewModel,
     onSettingsClick: () -> Unit,
     onDebugClick: () -> Unit,
-    onAddFoodClick: () -> Unit
+    onAddFoodClick: (mealTimeGuid: String?) -> Unit
 ) {
     val context = LocalContext.current
     val selectedDate by viewModel.selectedDate.collectAsState()
@@ -134,15 +148,6 @@ fun DashboardScreen(
                     }
                 }
             )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = onAddFoodClick,
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Add Food/Water")
-            }
         }
     ) { padding ->
         showPopupFor?.let { (title, breakdownList) ->
@@ -195,153 +200,367 @@ fun DashboardScreen(
             }
         }
 
-        Column(
+        var selectedEntryIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+        var showMoveDialog by remember { mutableStateOf(false) }
+        var showDeleteDialog by remember { mutableStateOf(false) }
+        var singleMoveTargetId by remember { mutableStateOf<String?>(null) }
+        var singleDeleteTargetId by remember { mutableStateOf<String?>(null) }
+
+        val allValidIds = remember(uiState) {
+            (uiState as? DashboardUiState.Success)?.diaryResponse?.data?.times
+                ?.flatMap { it.foodstuff ?: emptyList() }
+                ?.mapNotNull { it.id }?.toSet() ?: emptySet()
+        }
+        LaunchedEffect(allValidIds) {
+            selectedEntryIds = selectedEntryIds.intersect(allValidIds)
+        }
+
+        Box(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
-                .pointerInput(canGoForward) {
-                    detectHorizontalDragGestures(
-                        onDragEnd = {
-                            if (totalDragX > swipeThresholdPx) {
-                                viewModel.prevDay()
-                            } else if (totalDragX < -swipeThresholdPx && canGoForward) {
-                                viewModel.nextDay()
-                            }
-                            totalDragX = 0f
-                        },
-                        onDragCancel = {
-                            totalDragX = 0f
-                        },
-                        onHorizontalDrag = { change, dragAmount ->
-                            change.consume()
-                            totalDragX += dragAmount
-                        }
-                    )
-                }
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Row(
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.End
-            ) {
-                Text("With meals")
-                Spacer(modifier = Modifier.width(8.dp))
-                Switch(checked = withMeals, onCheckedChange = { viewModel.toggleWithMeals(it) })
-            }
-
-            when (val state = uiState) {
-                is DashboardUiState.Loading -> {
-                    Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
-                    }
-                }
-                is DashboardUiState.Error -> {
-                    Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(state.message, color = MaterialTheme.colorScheme.error)
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Button(onClick = { viewModel.refresh() }) {
-                                Text("Retry")
+                    .fillMaxSize()
+                    .pointerInput(canGoForward) {
+                        detectHorizontalDragGestures(
+                            onDragEnd = {
+                                if (totalDragX > swipeThresholdPx) {
+                                    viewModel.prevDay()
+                                } else if (totalDragX < -swipeThresholdPx && canGoForward) {
+                                    viewModel.nextDay()
+                                }
+                                totalDragX = 0f
+                            },
+                            onDragCancel = {
+                                totalDragX = 0f
+                            },
+                            onHorizontalDrag = { change, dragAmount ->
+                                change.consume()
+                                totalDragX += dragAmount
                             }
+                        )
+                    }
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Text("With meals")
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Switch(checked = withMeals, onCheckedChange = { viewModel.toggleWithMeals(it) })
+                }
+
+                when (val state = uiState) {
+                    is DashboardUiState.Loading -> {
+                        Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator()
                         }
                     }
-                }
-                is DashboardUiState.Success -> {
-                    val summary = state.summary
-                    val totalMacros = summary.protein + summary.fat + summary.carb
-                    val protSweep = if (totalMacros > 0) ((summary.protein / totalMacros) * 360).toFloat() else 0f
-                    val fatSweep = if (totalMacros > 0) ((summary.fat / totalMacros) * 360).toFloat() else 0f
-                    val carbSweep = if (totalMacros > 0) ((summary.carb / totalMacros) * 360).toFloat() else 0f
-
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier
-                            .size(200.dp)
-                            .clickable {
-                                if (summary.kcalBreakdown.isNotEmpty()) {
-                                    showPopupFor = "Calories" to summary.kcalBreakdown
+                    is DashboardUiState.Error -> {
+                        Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(state.message, color = MaterialTheme.colorScheme.error)
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Button(onClick = { viewModel.refresh() }) {
+                                    Text("Retry")
                                 }
                             }
-                    ) {
-                        Canvas(modifier = Modifier.fillMaxSize()) {
-                            val strokeWidth = 30.dp.toPx()
-                            if (totalMacros == 0.0) {
-                                drawArc(Color.DarkGray, 0f, 360f, false, style = Stroke(strokeWidth))
-                            } else {
-                                drawArc(Color(0xFFE57373), -90f, protSweep, false, style = Stroke(strokeWidth, cap = StrokeCap.Round))
-                                drawArc(Color(0xFFFFD54F), -90f + protSweep, fatSweep, false, style = Stroke(strokeWidth, cap = StrokeCap.Round))
-                                drawArc(Color(0xFF64B5F6), -90f + protSweep + fatSweep, carbSweep, false, style = Stroke(strokeWidth, cap = StrokeCap.Round))
+                        }
+                    }
+                    is DashboardUiState.Success -> {
+                        val summary = state.summary
+                        val totalMacros = summary.protein + summary.fat + summary.carb
+                        val protSweep = if (totalMacros > 0) ((summary.protein / totalMacros) * 360).toFloat() else 0f
+                        val fatSweep = if (totalMacros > 0) ((summary.fat / totalMacros) * 360).toFloat() else 0f
+                        val carbSweep = if (totalMacros > 0) ((summary.carb / totalMacros) * 360).toFloat() else 0f
+
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .size(200.dp)
+                                .clickable {
+                                    if (summary.kcalBreakdown.isNotEmpty()) {
+                                        showPopupFor = "Calories" to summary.kcalBreakdown
+                                    }
+                                }
+                        ) {
+                            Canvas(modifier = Modifier.fillMaxSize()) {
+                                val strokeWidth = 30.dp.toPx()
+                                if (totalMacros == 0.0) {
+                                    drawArc(Color.DarkGray, 0f, 360f, false, style = Stroke(strokeWidth))
+                                } else {
+                                    drawArc(Color(0xFFE57373), -90f, protSweep, false, style = Stroke(strokeWidth, cap = StrokeCap.Round))
+                                    drawArc(Color(0xFFFFD54F), -90f + protSweep, fatSweep, false, style = Stroke(strokeWidth, cap = StrokeCap.Round))
+                                    drawArc(Color(0xFF64B5F6), -90f + protSweep + fatSweep, carbSweep, false, style = Stroke(strokeWidth, cap = StrokeCap.Round))
+                                }
+                            }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("${summary.kcal.toInt()}", fontSize = 32.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                Text("kcal", fontSize = 14.sp, color = Color.White)
                             }
                         }
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("${summary.kcal.toInt()}", fontSize = 32.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                            Text("kcal", fontSize = 14.sp, color = Color.White)
+
+                        Spacer(modifier = Modifier.height(32.dp))
+
+                        // Macros Row
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                            MacroItem("Protein", summary.protein, Color(0xFFE57373)) {
+                                if (summary.proteinBreakdown.isNotEmpty()) showPopupFor = "Protein" to summary.proteinBreakdown
+                            }
+                            MacroItem("Fat", summary.fat, Color(0xFFFFD54F)) {
+                                if (summary.fatBreakdown.isNotEmpty()) showPopupFor = "Fat" to summary.fatBreakdown
+                            }
+                            MacroItem("Carbs", summary.carb, Color(0xFF64B5F6)) {
+                                if (summary.carbBreakdown.isNotEmpty()) showPopupFor = "Carbohydrates" to summary.carbBreakdown
+                            }
                         }
+
+                        Spacer(modifier = Modifier.height(32.dp))
+                        HorizontalDivider(color = Color.DarkGray)
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Micros Row 1
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                            val waterLiters = summary.water / 1000.0
+                            MicroItem("💧 Water", String.format(Locale.US, "%.1f L", waterLiters)) {
+                                if (summary.waterBreakdown.isNotEmpty()) showPopupFor = "💧 Water" to summary.waterBreakdown
+                            }
+                            MicroItem("🌾 Fiber", "${summary.fiber.toInt()} g") {
+                                if (summary.fiberBreakdown.isNotEmpty()) showPopupFor = "🌾 Fiber" to summary.fiberBreakdown
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Micros Row 2
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                            MicroItem("🍬 Sugar", "${summary.sugar.toInt()} g") {
+                                if (summary.sugarBreakdown.isNotEmpty()) showPopupFor = "🍬 Sugar" to summary.sugarBreakdown
+                            }
+                            MicroItem("🧂 Salt", String.format(Locale.US, "%.1f g", summary.salt)) {
+                                if (summary.saltBreakdown.isNotEmpty()) showPopupFor = "🧂 Salt" to summary.saltBreakdown
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Micros Row 3: Vegetables & Fruits
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                            MicroItem("🥦 Veg", "${summary.vegGrams.toInt()} g", modifier = Modifier.width(96.dp)) {
+                                if (summary.vegBreakdown.isNotEmpty()) showPopupFor = "🥦 Vegetables" to summary.vegBreakdown
+                            }
+                            MicroItem("🍎 Fruit", "${summary.fruitGrams.toInt()} g", modifier = Modifier.width(96.dp)) {
+                                if (summary.fruitBreakdown.isNotEmpty()) showPopupFor = "🍎 Fruits" to summary.fruitBreakdown
+                            }
+                            val totalVegFruit = (summary.vegGrams + summary.fruitGrams).toInt()
+                            MicroItem("🥗 Total", "$totalVegFruit/400g", modifier = Modifier.width(108.dp)) {
+                                if (summary.vegFruitBreakdown.isNotEmpty()) showPopupFor = "🥗 Vegetables & Fruits" to summary.vegFruitBreakdown
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(24.dp))
+                        HorizontalDivider(color = Color(0xFF2C2C2C))
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        DailyDiarySpoiler(
+                            diaryResponse = state.diaryResponse,
+                            selectedEntryIds = selectedEntryIds,
+                            onToggleSelect = { id ->
+                                selectedEntryIds = if (selectedEntryIds.contains(id)) selectedEntryIds - id else selectedEntryIds + id
+                            },
+                            onAddFoodClick = onAddFoodClick,
+                            onSingleMove = { id ->
+                                singleMoveTargetId = id
+                                showMoveDialog = true
+                            },
+                            onSingleDelete = { id ->
+                                singleDeleteTargetId = id
+                                showDeleteDialog = true
+                            }
+                        )
+
+                        // Bottom spacer to ensure content isn't covered when bottom bar is displayed
+                        Spacer(modifier = Modifier.height(80.dp))
                     }
+                }
+            }
 
-                    Spacer(modifier = Modifier.height(32.dp))
+            // Fixed Overlap Floating Bottom Bar for Multi-Select
+            AnimatedVisibility(
+                visible = selectedEntryIds.isNotEmpty(),
+                enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(horizontal = 16.dp, vertical = 16.dp)
+                    .navigationBarsPadding()
+            ) {
+                Card(
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF222222)),
+                    border = BorderStroke(1.dp, Color(0xFF383838)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "Выбрано: ${selectedEntryIds.size}",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = Color.White
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            TextButton(
+                                onClick = {
+                                    selectedEntryIds = if (selectedEntryIds.size == allValidIds.size) emptySet() else allValidIds
+                                },
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = if (selectedEntryIds.size == allValidIds.size) "Снять всё" else "Все (${allValidIds.size})",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
 
-                    // Macros Row
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                        MacroItem("Protein", summary.protein, Color(0xFFE57373)) {
-                            if (summary.proteinBreakdown.isNotEmpty()) showPopupFor = "Protein" to summary.proteinBreakdown
-                        }
-                        MacroItem("Fat", summary.fat, Color(0xFFFFD54F)) {
-                            if (summary.fatBreakdown.isNotEmpty()) showPopupFor = "Fat" to summary.fatBreakdown
-                        }
-                        MacroItem("Carbs", summary.carb, Color(0xFF64B5F6)) {
-                            if (summary.carbBreakdown.isNotEmpty()) showPopupFor = "Carbohydrates" to summary.carbBreakdown
-                        }
-                    }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            FilledTonalButton(
+                                onClick = {
+                                    singleMoveTargetId = null
+                                    showMoveDialog = true
+                                },
+                                colors = ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = Color(0xFF1E3A5F),
+                                    contentColor = Color(0xFF64B5F6)
+                                ),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.height(34.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                    contentDescription = "Перенести",
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Перенести", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            }
 
-                    Spacer(modifier = Modifier.height(32.dp))
-                    HorizontalDivider(color = Color.DarkGray)
-                    Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
 
-                    // Micros Row 1
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                        val waterLiters = summary.water / 1000.0
-                        MicroItem("💧 Water", String.format(Locale.US, "%.1f L", waterLiters)) {
-                            if (summary.waterBreakdown.isNotEmpty()) showPopupFor = "💧 Water" to summary.waterBreakdown
-                        }
-                        MicroItem("🌾 Fiber", "${summary.fiber.toInt()} g") {
-                            if (summary.fiberBreakdown.isNotEmpty()) showPopupFor = "🌾 Fiber" to summary.fiberBreakdown
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Micros Row 2
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                        MicroItem("🍬 Sugar", "${summary.sugar.toInt()} g") {
-                            if (summary.sugarBreakdown.isNotEmpty()) showPopupFor = "🍬 Sugar" to summary.sugarBreakdown
-                        }
-                        MicroItem("🧂 Salt", String.format(Locale.US, "%.1f g", summary.salt)) {
-                            if (summary.saltBreakdown.isNotEmpty()) showPopupFor = "🧂 Salt" to summary.saltBreakdown
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Micros Row 3: Vegetables & Fruits
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                        MicroItem("🥦 Veg", "${summary.vegGrams.toInt()} g", modifier = Modifier.width(96.dp)) {
-                            if (summary.vegBreakdown.isNotEmpty()) showPopupFor = "🥦 Vegetables" to summary.vegBreakdown
-                        }
-                        MicroItem("🍎 Fruit", "${summary.fruitGrams.toInt()} g", modifier = Modifier.width(96.dp)) {
-                            if (summary.fruitBreakdown.isNotEmpty()) showPopupFor = "🍎 Fruits" to summary.fruitBreakdown
-                        }
-                        val totalVegFruit = (summary.vegGrams + summary.fruitGrams).toInt()
-                        MicroItem("🥗 Total", "$totalVegFruit/400g", modifier = Modifier.width(108.dp)) {
-                            if (summary.vegFruitBreakdown.isNotEmpty()) showPopupFor = "🥗 Vegetables & Fruits" to summary.vegFruitBreakdown
+                            FilledTonalButton(
+                                onClick = {
+                                    singleDeleteTargetId = null
+                                    showDeleteDialog = true
+                                },
+                                colors = ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = Color(0xFF4A1A1A),
+                                    contentColor = Color(0xFFEF5350)
+                                ),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.height(34.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = "Удалить",
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Удалить", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            }
                         }
                     }
                 }
+            }
+        }
+
+        // Move Dialog
+        if (showMoveDialog) {
+            val targetIds = singleMoveTargetId?.let { setOf(it) } ?: selectedEntryIds
+            if (targetIds.isNotEmpty()) {
+                MoveEntriesDialog(
+                    count = targetIds.size,
+                    currentDate = selectedDate,
+                    onDismiss = {
+                        showMoveDialog = false
+                        singleMoveTargetId = null
+                    },
+                    onConfirm = { targetTimeId, targetDateStr ->
+                        viewModel.moveEntries(targetIds, targetTimeId, targetDateStr) { success ->
+                            if (success) {
+                                Toast.makeText(context, "Записи успешно перенесены", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(context, "Ошибка при переносе", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        showMoveDialog = false
+                        singleMoveTargetId = null
+                        selectedEntryIds = emptySet()
+                    }
+                )
+            }
+        }
+
+        // Delete Confirmation Dialog
+        if (showDeleteDialog) {
+            val targetIds = singleDeleteTargetId?.let { setOf(it) } ?: selectedEntryIds
+            if (targetIds.isNotEmpty()) {
+                AlertDialog(
+                    onDismissRequest = {
+                        showDeleteDialog = false
+                        singleDeleteTargetId = null
+                    },
+                    title = { Text("Удалить записи?") },
+                    text = {
+                        Text(
+                            if (targetIds.size == 1) "Вы уверены, что хотите удалить эту запись из дневника?"
+                            else "Вы уверены, что хотите удалить выбранные записи (${targetIds.size} шт.) из дневника?"
+                        )
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                viewModel.deleteEntries(targetIds) { success ->
+                                    if (success) {
+                                        Toast.makeText(context, "Записи удалены", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        Toast.makeText(context, "Ошибка при удалении", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                                showDeleteDialog = false
+                                singleDeleteTargetId = null
+                                selectedEntryIds = emptySet()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF5350))
+                        ) {
+                            Text("Удалить", color = Color.White)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = {
+                            showDeleteDialog = false
+                            singleDeleteTargetId = null
+                        }) {
+                            Text("Отмена")
+                        }
+                    }
+                )
             }
         }
     }
@@ -503,6 +722,529 @@ fun ShareOptionsDialog(
         confirmButton = {
             TextButton(onClick = onDismiss) {
                 Text("Закрыть")
+            }
+        }
+    )
+}
+
+@Composable
+fun DailyDiarySpoiler(
+    diaryResponse: DiaryResponse?,
+    selectedEntryIds: Set<String>,
+    onToggleSelect: (String) -> Unit,
+    onAddFoodClick: (mealTimeGuid: String?) -> Unit,
+    onSingleMove: (String) -> Unit,
+    onSingleDelete: (String) -> Unit
+) {
+    var isDiaryExpanded by remember { mutableStateOf(true) }
+
+    val mealTimes = diaryResponse?.data?.times ?: emptyList()
+    val allFoods = remember(diaryResponse) {
+        mealTimes.flatMap { it.foodstuff ?: emptyList() }
+    }
+    val totalKcal = remember(allFoods) {
+        allFoods.sumOf { NutrientUtils.parseNutrient(it.energy) }
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A1A)),
+        border = BorderStroke(1.dp, Color(0xFF2C2C2C))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp)
+        ) {
+            // Spoiler Header Panel
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { isDiaryExpanded = !isDiaryExpanded }
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("🍽️", fontSize = 20.sp)
+                Spacer(modifier = Modifier.width(8.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Приёмы пищи",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = Color.White
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFF2A2A2A)
+                        ) {
+                            Text(
+                                text = "${allFoods.size}",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                    if (allFoods.isNotEmpty()) {
+                        Text(
+                            text = "Всего: ${totalKcal.toInt()} ккал",
+                            fontSize = 12.sp,
+                            color = Color.Gray
+                        )
+                    }
+                }
+
+                // Add button on the spoiler header
+                Button(
+                    onClick = { onAddFoodClick(null) },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = Color.Black
+                    ),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    modifier = Modifier.height(34.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Добавить продукт",
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Добавить",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(4.dp))
+
+                IconButton(
+                    onClick = { isDiaryExpanded = !isDiaryExpanded },
+                    modifier = Modifier.size(34.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isDiaryExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = if (isDiaryExpanded) "Свернуть" else "Развернуть",
+                        tint = Color.LightGray
+                    )
+                }
+            }
+
+            // Expanded content
+            AnimatedVisibility(visible = isDiaryExpanded) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 10.dp)
+                ) {
+                    if (mealTimes.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Нет данных дневника за этот день",
+                                color = Color.Gray,
+                                fontSize = 13.sp
+                            )
+                        }
+                    } else {
+                        mealTimes.forEach { mealTime ->
+                            MealTimeGroup(
+                                mealTime = mealTime,
+                                selectedEntryIds = selectedEntryIds,
+                                onToggleSelect = onToggleSelect,
+                                onAddFoodClick = {
+                                    onAddFoodClick(mealTime.id)
+                                },
+                                onSingleMove = onSingleMove,
+                                onSingleDelete = onSingleDelete
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MealTimeGroup(
+    mealTime: MealTime,
+    selectedEntryIds: Set<String>,
+    onToggleSelect: (String) -> Unit,
+    onAddFoodClick: () -> Unit,
+    onSingleMove: (String) -> Unit,
+    onSingleDelete: (String) -> Unit
+) {
+    val foods = mealTime.foodstuff ?: emptyList()
+    var isExpanded by remember(mealTime.id) { mutableStateOf(foods.isNotEmpty()) }
+    val mealKcal = remember(foods) {
+        foods.sumOf { NutrientUtils.parseNutrient(it.energy) }
+    }
+    val mealDisplayName = remember(mealTime) {
+        NutrientUtils.getMealTimeDisplayName(mealTime)
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF141414)),
+        border = BorderStroke(1.dp, Color(0xFF222222))
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // Meal Header
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { isExpanded = !isExpanded }
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = mealDisplayName,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 14.sp,
+                            color = Color.White
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "(${foods.size})",
+                            fontSize = 12.sp,
+                            color = Color.Gray
+                        )
+                    }
+                    if (foods.isNotEmpty()) {
+                        Text(
+                            text = "${mealKcal.toInt()} ккал",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
+                // Per-meal Add Button
+                IconButton(
+                    onClick = onAddFoodClick,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Добавить в $mealDisplayName",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(4.dp))
+
+                // Chevron
+                IconButton(
+                    onClick = { isExpanded = !isExpanded },
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = if (isExpanded) "Свернуть" else "Развернуть",
+                        tint = Color.Gray,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+
+            // Foods List inside Meal
+            AnimatedVisibility(visible = isExpanded) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    if (foods.isEmpty()) {
+                        Text(
+                            text = "Нет записей",
+                            color = Color.DarkGray,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                        )
+                    } else {
+                        foods.forEachIndexed { index, food ->
+                            val foodId = food.id ?: ""
+                            val isSelected = selectedEntryIds.contains(foodId)
+
+                            FoodEntryRow(
+                                food = food,
+                                isSelected = isSelected,
+                                onToggleSelect = {
+                                    if (foodId.isNotBlank()) onToggleSelect(foodId)
+                                },
+                                onMove = {
+                                    if (foodId.isNotBlank()) onSingleMove(foodId)
+                                },
+                                onDelete = {
+                                    if (foodId.isNotBlank()) onSingleDelete(foodId)
+                                }
+                            )
+
+                            if (index < foods.lastIndex) {
+                                HorizontalDivider(
+                                    color = Color(0xFF1E1E1E),
+                                    thickness = 0.5.dp,
+                                    modifier = Modifier.padding(horizontal = 8.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun FoodEntryRow(
+    food: Foodstuff,
+    isSelected: Boolean,
+    onToggleSelect: () -> Unit,
+    onMove: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val title = food.title ?: food.name ?: food.nazev ?: "Без названия"
+    val energyKcal = NutrientUtils.parseNutrient(food.energy).toInt()
+    val protein = NutrientUtils.parseNutrient(food.protein).toInt()
+    val fat = NutrientUtils.parseNutrient(food.fat).toInt()
+    val carbs = NutrientUtils.parseNutrient(food.carbohydrate).toInt()
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onToggleSelect() }
+            .padding(vertical = 6.dp, horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Checkbox(
+            checked = isSelected,
+            onCheckedChange = { onToggleSelect() },
+            colors = CheckboxDefaults.colors(
+                checkedColor = MaterialTheme.colorScheme.primary,
+                checkmarkColor = Color.Black,
+                uncheckedColor = Color.Gray
+            ),
+            modifier = Modifier.size(28.dp)
+        )
+
+        Spacer(modifier = Modifier.width(6.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                fontWeight = FontWeight.Medium,
+                fontSize = 13.sp,
+                color = Color.White,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(top = 2.dp)
+            ) {
+                if (!food.unit.isNullOrBlank()) {
+                    Text(
+                        text = food.unit,
+                        fontSize = 11.sp,
+                        color = Color(0xFF9E9E9E)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                }
+                Text(
+                    text = "$energyKcal ккал",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFFFFD54F)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Б:$protein Ж:$fat У:$carbs",
+                    fontSize = 10.sp,
+                    color = Color.Gray
+                )
+            }
+        }
+
+        // Action Buttons: Move & Delete
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(
+                onClick = onMove,
+                modifier = Modifier.size(30.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = "Перенести",
+                    tint = Color(0xFF64B5F6),
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+            IconButton(
+                onClick = onDelete,
+                modifier = Modifier.size(30.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "Удалить",
+                    tint = Color(0xFFEF5350),
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun MoveEntriesDialog(
+    count: Int,
+    currentDate: ZonedDateTime,
+    onDismiss: () -> Unit,
+    onConfirm: (targetTimeId: String, targetDateStr: String?) -> Unit
+) {
+    val context = LocalContext.current
+    var selectedMealTimeId by remember { mutableStateOf("1") }
+    var targetDate by remember { mutableStateOf(currentDate.toLocalDate()) }
+    val formatter = remember { DateTimeFormatter.ofPattern("dd.MM.yyyy") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Перенос ${if (count == 1) "записи" else "$count записей"}",
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp
+            )
+        },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+                Text(
+                    text = "Куда перенести:",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Date selection chips
+                Text(
+                    text = "Дата: ${targetDate.format(formatter)}",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    FilterChip(
+                        selected = targetDate == currentDate.toLocalDate(),
+                        onClick = { targetDate = currentDate.toLocalDate() },
+                        label = { Text("Этот день", fontSize = 11.sp) }
+                    )
+                    FilterChip(
+                        selected = targetDate == LocalDate.now(),
+                        onClick = { targetDate = LocalDate.now() },
+                        label = { Text("Сегодня", fontSize = 11.sp) }
+                    )
+                    FilterChip(
+                        selected = targetDate == LocalDate.now().minusDays(1),
+                        onClick = { targetDate = LocalDate.now().minusDays(1) },
+                        label = { Text("Вчера", fontSize = 11.sp) }
+                    )
+                }
+
+                TextButton(
+                    onClick = {
+                        val dialog = DatePickerDialog(
+                            context,
+                            { _, year, month, dayOfMonth ->
+                                targetDate = LocalDate.of(year, month + 1, dayOfMonth)
+                            },
+                            targetDate.year,
+                            targetDate.monthValue - 1,
+                            targetDate.dayOfMonth
+                        )
+                        dialog.show()
+                    },
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    Icon(Icons.Default.DateRange, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Выбрать другую дату...", fontSize = 12.sp)
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+                HorizontalDivider(color = Color(0xFF2C2C2C))
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text(
+                    text = "Приём пищи:",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                NutrientUtils.STANDARD_MEAL_OPTIONS.forEach { (id, label) ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { selectedMealTimeId = id }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = selectedMealTimeId == id,
+                            onClick = { selectedMealTimeId = id },
+                            colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.primary)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = label,
+                            fontSize = 13.sp,
+                            color = if (selectedMealTimeId == id) Color.White else Color.Gray
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val dateStr = targetDate.format(formatter)
+                    onConfirm(selectedMealTimeId, dateStr)
+                },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = Color.Black
+                )
+            ) {
+                Text("Перенести ($count)")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Отмена")
             }
         }
     )
