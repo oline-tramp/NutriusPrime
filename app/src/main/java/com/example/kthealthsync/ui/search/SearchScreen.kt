@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.kthealthsync.AutocompleteResponseItem
+import com.example.kthealthsync.domain.model.AddedFoodInfo
 import com.example.kthealthsync.ui.search.components.AddFoodDialog
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -38,7 +39,7 @@ fun SearchScreen(
     currentSalt: Double,
     viewModel: SearchViewModel = viewModel(),
     onBack: () -> Unit,
-    onFoodAdded: () -> Unit
+    onFoodAdded: (AddedFoodInfo) -> Unit
 ) {
     val query by viewModel.query.collectAsState()
     val results by viewModel.results.collectAsState()
@@ -202,10 +203,10 @@ fun SearchScreen(
             nutrientGoals = nutrientGoals,
             viewModel = viewModel,
             onDismiss = { showAddDialog = false },
-            onSuccess = {
+            onSuccess = { info ->
                 showAddDialog = false
                 viewModel.clearSearch()
-                onFoodAdded()
+                onFoodAdded(info)
             }
         )
     }

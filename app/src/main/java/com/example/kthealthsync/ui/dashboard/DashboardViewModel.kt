@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 sealed interface DashboardUiState {
     data object Loading : DashboardUiState
@@ -98,11 +99,71 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         loadDailyData()
     }
 
-    fun refresh() {
+    fun refresh(silent: Boolean = false) {
         viewModelScope.launch {
             repository.fetchNutrientGoalsFromApi(force = true)
         }
-        loadDailyData()
+        loadDailyData(silent = silent)
+    }
+
+    fun addEntryOptimistic(
+        title: String,
+        kcal: Double,
+        protein: Double,
+        carbs: Double,
+        fat: Double,
+        fiber: Double,
+        sugar: Double,
+        salt: Double,
+        unitStr: String,
+        mealTimeId: String?
+    ) {
+        val currentState = _uiState.value
+        if (currentState is DashboardUiState.Success && currentState.diaryResponse?.data?.times != null) {
+            val targetMealId = mealTimeId ?: "1"
+            val tempId = "temp_${System.currentTimeMillis()}"
+            val newFood = Foodstuff(
+                id = tempId,
+                title = title,
+                name = title,
+                energy = String.format(Locale.US, "%.1f", kcal),
+                protein = String.format(Locale.US, "%.1f", protein),
+                carbohydrate = String.format(Locale.US, "%.1f", carbs),
+                fat = String.format(Locale.US, "%.1f", fat),
+                fiber = String.format(Locale.US, "%.1f", fiber),
+                sugar = String.format(Locale.US, "%.1f", sugar),
+                salt = String.format(Locale.US, "%.1f", salt),
+                unit = unitStr
+            )
+
+            val updatedTimes = currentState.diaryResponse.data.times.map { mealTime ->
+                if (mealTime.id == targetMealId) {
+                    val existing = mealTime.foodstuff ?: emptyList()
+                    mealTime.copy(foodstuff = existing + newFood)
+                } else {
+                    mealTime
+                }
+            }
+
+            val updatedDiary = currentState.diaryResponse.copy(
+                data = currentState.diaryResponse.data.copy(times = updatedTimes)
+            )
+
+            val currentSummary = currentState.summary
+            val updatedSummary = currentSummary.copy(
+                kcal = currentSummary.kcal + kcal,
+                protein = currentSummary.protein + protein,
+                carb = currentSummary.carb + carbs,
+                fat = currentSummary.fat + fat,
+                fiber = currentSummary.fiber + fiber,
+                sugar = currentSummary.sugar + sugar,
+                salt = currentSummary.salt + salt
+            )
+
+            _uiState.value = DashboardUiState.Success(updatedSummary, updatedDiary)
+            Log.d("NutriusAdd", "Optimistic add applied for $title ($kcal kcal to meal $targetMealId)")
+            DebugLogger.addActionLog("Optimistic add: $title ($kcal kcal to meal $targetMealId)")
+        }
     }
 
     fun deleteEntries(ids: Collection<String>, onComplete: ((Boolean) -> Unit)? = null) {

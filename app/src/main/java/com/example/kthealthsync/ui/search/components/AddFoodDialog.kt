@@ -18,6 +18,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.kthealthsync.*
+import com.example.kthealthsync.domain.model.AddedFoodInfo
 import com.example.kthealthsync.domain.model.NutrientGoals
 import com.example.kthealthsync.domain.util.NutrientUtils
 import com.example.kthealthsync.ui.search.SearchViewModel
@@ -53,7 +54,7 @@ fun AddFoodDialog(
     nutrientGoals: NutrientGoals,
     viewModel: SearchViewModel,
     onDismiss: () -> Unit,
-    onSuccess: () -> Unit
+    onSuccess: (AddedFoodInfo) -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
 
@@ -312,6 +313,9 @@ fun AddFoodDialog(
                             val pVal = if (mult == 1.0) actualDefaultBaseAmount else 1.0
                             val inputVal = amountText.replace(',', '.').toDoubleOrNull() ?: pVal
                             val finalAmount = formatAmount(inputVal * mult)
+                            val factor = (inputVal * mult) / 100.0
+                            val itemKcal = item.value?.replace(Regex("[^0-9.]"), "")?.toDoubleOrNull() ?: 0.0
+                            val addedKcal = factor * itemKcal
 
                             val request = AddFoodRequest(
                                 guid = item.id!!,
@@ -323,7 +327,19 @@ fun AddFoodDialog(
                             )
                             val response = viewModel.addFood(request)
                             if (response.code == 0) {
-                                onSuccess()
+                                val addedInfo = AddedFoodInfo(
+                                    title = item.title ?: "",
+                                    kcal = addedKcal,
+                                    protein = proteinPer100 * factor,
+                                    carbs = carbsPer100 * factor,
+                                    fat = fatPer100 * factor,
+                                    fiber = fiberPer100 * factor,
+                                    sugar = sugarPer100 * factor,
+                                    salt = saltPer100 * factor,
+                                    unitStr = "${amountText.ifBlank { pVal.toString() }} ${selectedUnit?.title ?: "g"}",
+                                    mealTimeId = selectedTimeGuid
+                                )
+                                onSuccess(addedInfo)
                             } else {
                                 errorMsg = response.message ?: "Failed with code ${response.code}"
                             }

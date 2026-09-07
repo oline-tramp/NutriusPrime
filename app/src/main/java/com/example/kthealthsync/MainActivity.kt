@@ -87,9 +87,21 @@ class MainActivity : ComponentActivity() {
                                     preselectedMealTimeGuid = null
                                     currentScreen = "dashboard"
                                 },
-                                onFoodAdded = {
+                                onFoodAdded = { addedInfo ->
                                     preselectedMealTimeGuid = null
-                                    dashboardViewModel.refresh()
+                                    dashboardViewModel.addEntryOptimistic(
+                                        title = addedInfo.title,
+                                        kcal = addedInfo.kcal,
+                                        protein = addedInfo.protein,
+                                        carbs = addedInfo.carbs,
+                                        fat = addedInfo.fat,
+                                        fiber = addedInfo.fiber,
+                                        sugar = addedInfo.sugar,
+                                        salt = addedInfo.salt,
+                                        unitStr = addedInfo.unitStr,
+                                        mealTimeId = addedInfo.mealTimeId
+                                    )
+                                    dashboardViewModel.refresh(silent = true)
                                     currentScreen = "dashboard"
                                 }
                             )
