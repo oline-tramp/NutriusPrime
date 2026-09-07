@@ -3,8 +3,15 @@ package com.example.kthealthsync
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -58,19 +65,34 @@ class MainActivity : ComponentActivity() {
                     val selectedDate by dashboardViewModel.selectedDate.collectAsState()
                     val dashboardUiState by dashboardViewModel.uiState.collectAsState()
 
-                    when (currentScreen) {
-                        "dashboard" -> {
-                            DashboardScreen(
-                                viewModel = dashboardViewModel,
-                                onSettingsClick = { currentScreen = "settings" },
-                                onDebugClick = { currentScreen = "debug" },
-                                onAddFoodClick = { mealTimeGuid ->
-                                    preselectedMealTimeGuid = mealTimeGuid
-                                    currentScreen = "search"
-                                }
-                            )
+                    BackHandler(enabled = currentScreen != "dashboard") {
+                        when (currentScreen) {
+                            "login" -> currentScreen = "settings"
+                            "search" -> {
+                                preselectedMealTimeGuid = null
+                                currentScreen = "dashboard"
+                            }
+                            else -> currentScreen = "dashboard"
                         }
-                        "search" -> {
+                    }
+
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        // Dashboard remains continuously mounted to preserve scroll position and spoiler states
+                        DashboardScreen(
+                            viewModel = dashboardViewModel,
+                            onSettingsClick = { currentScreen = "settings" },
+                            onDebugClick = { currentScreen = "debug" },
+                            onAddFoodClick = { mealTimeGuid ->
+                                preselectedMealTimeGuid = mealTimeGuid
+                                currentScreen = "search"
+                            }
+                        )
+
+                        AnimatedVisibility(
+                            visible = currentScreen == "search",
+                            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+                        ) {
                             val formattedDate = selectedDate.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
                             val summary = (dashboardUiState as? DashboardUiState.Success)?.summary
                             SearchScreen(
@@ -106,23 +128,38 @@ class MainActivity : ComponentActivity() {
                                 }
                             )
                         }
-                        "settings" -> {
+
+                        AnimatedVisibility(
+                            visible = currentScreen == "settings",
+                            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+                        ) {
                             SettingsScreen(
                                 onBack = { currentScreen = "dashboard" },
                                 onRequestPermissions = {
                                     if (healthConnectManager.isAvailable()) {
                                         requestPermissions.launch(healthConnectManager.permissions)
                                     } else {
-                                        Toast.makeText(this, "Health Connect is not available on this device", Toast.LENGTH_LONG).show()
+                                        Toast.makeText(this@MainActivity, "Health Connect is not available on this device", Toast.LENGTH_LONG).show()
                                     }
                                 },
                                 onLoginClick = { currentScreen = "login" }
                             )
                         }
-                        "debug" -> {
+
+                        AnimatedVisibility(
+                            visible = currentScreen == "debug",
+                            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+                        ) {
                             DebugLogsScreen(onBack = { currentScreen = "dashboard" })
                         }
-                        "login" -> {
+
+                        AnimatedVisibility(
+                            visible = currentScreen == "login",
+                            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+                        ) {
                             LoginScreen(
                                 prefs = prefs,
                                 onBack = { currentScreen = "settings" },

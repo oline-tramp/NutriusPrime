@@ -49,6 +49,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -763,7 +764,7 @@ fun DailyDiarySpoiler(
     onSingleDelete: (String) -> Unit,
     onMoveFoodToMeal: (foodId: String, targetMealTimeId: String) -> Unit
 ) {
-    var isDiaryExpanded by remember { mutableStateOf(true) }
+    var isDiaryExpanded by rememberSaveable { mutableStateOf(true) }
     var draggedFoodState by remember { mutableStateOf<DraggedFoodState?>(null) }
     val mealBounds = remember { mutableStateMapOf<String, Rect>() }
     var spoilerCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
@@ -1063,7 +1064,7 @@ fun MealTimeGroup(
     draggedFoodId: String?
 ) {
     val foods = mealTime.foodstuff ?: emptyList()
-    var isExpanded by remember(mealTime.id) { mutableStateOf(foods.isNotEmpty()) }
+    var isExpanded by rememberSaveable(mealTime.id) { mutableStateOf(foods.isNotEmpty()) }
     val mealKcal = remember(foods) {
         foods.sumOf { NutrientUtils.parseNutrient(it.energy) }
     }
