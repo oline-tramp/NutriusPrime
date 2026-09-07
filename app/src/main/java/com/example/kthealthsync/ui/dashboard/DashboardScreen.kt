@@ -24,6 +24,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -261,19 +262,23 @@ fun DashboardScreen(
                         )
                     }
                     .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 16.dp),
+                        .padding(bottom = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.End
                 ) {
-                    Text("With meals")
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Switch(checked = withMeals, onCheckedChange = { viewModel.toggleWithMeals(it) })
+                    Text("With meals", fontSize = 12.sp, color = Color.Gray)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Switch(
+                        checked = withMeals,
+                        onCheckedChange = { viewModel.toggleWithMeals(it) },
+                        modifier = Modifier.scale(0.75f)
+                    )
                 }
 
                 when (val state = uiState) {
@@ -303,7 +308,7 @@ fun DashboardScreen(
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier
-                                .size(200.dp)
+                                .size(145.dp)
                                 .clickable {
                                     if (summary.kcalBreakdown.isNotEmpty()) {
                                         showPopupFor = "Calories" to summary.kcalBreakdown
@@ -311,7 +316,7 @@ fun DashboardScreen(
                                 }
                         ) {
                             Canvas(modifier = Modifier.fillMaxSize()) {
-                                val strokeWidth = 30.dp.toPx()
+                                val strokeWidth = 20.dp.toPx()
                                 if (totalMacros == 0.0) {
                                     drawArc(Color.DarkGray, 0f, 360f, false, style = Stroke(strokeWidth))
                                 } else {
@@ -321,12 +326,12 @@ fun DashboardScreen(
                                 }
                             }
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("${summary.kcal.toInt()}", fontSize = 32.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                                Text("kcal", fontSize = 14.sp, color = Color.White)
+                                Text("${summary.kcal.toInt()}", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                Text("kcal", fontSize = 12.sp, color = Color(0xFFAAAAAA))
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(32.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
 
                         // Macros Row
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
@@ -341,52 +346,52 @@ fun DashboardScreen(
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(32.dp))
-                        HorizontalDivider(color = Color.DarkGray)
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
+                        HorizontalDivider(color = Color(0xFF2A2A2A), thickness = 1.dp)
+                        Spacer(modifier = Modifier.height(10.dp))
 
-                        // Micros Row 1
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                        // Micros Row 1 (4 items)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
                             val waterLiters = summary.water / 1000.0
-                            MicroItem("💧 Water", String.format(Locale.US, "%.1f L", waterLiters)) {
+                            MicroItem("💧 Water", String.format(Locale.US, "%.1f L", waterLiters), modifier = Modifier.weight(1f)) {
                                 if (summary.waterBreakdown.isNotEmpty()) showPopupFor = "💧 Water" to summary.waterBreakdown
                             }
-                            MicroItem("🌾 Fiber", "${summary.fiber.toInt()} g") {
+                            MicroItem("🌾 Fiber", "${summary.fiber.toInt()} g", modifier = Modifier.weight(1f)) {
                                 if (summary.fiberBreakdown.isNotEmpty()) showPopupFor = "🌾 Fiber" to summary.fiberBreakdown
                             }
-                        }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // Micros Row 2
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                            MicroItem("🍬 Sugar", "${summary.sugar.toInt()} g") {
+                            MicroItem("🍬 Sugar", "${summary.sugar.toInt()} g", modifier = Modifier.weight(1f)) {
                                 if (summary.sugarBreakdown.isNotEmpty()) showPopupFor = "🍬 Sugar" to summary.sugarBreakdown
                             }
-                            MicroItem("🧂 Salt", String.format(Locale.US, "%.1f g", summary.salt)) {
+                            MicroItem("🧂 Salt", String.format(Locale.US, "%.1f g", summary.salt), modifier = Modifier.weight(1f)) {
                                 if (summary.saltBreakdown.isNotEmpty()) showPopupFor = "🧂 Salt" to summary.saltBreakdown
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
 
-                        // Micros Row 3: Vegetables & Fruits
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                            MicroItem("🥦 Veg", "${summary.vegGrams.toInt()} g", modifier = Modifier.width(96.dp)) {
+                        // Micros Row 2 (3 items)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            MicroItem("🥦 Veg", "${summary.vegGrams.toInt()} g", modifier = Modifier.weight(1f)) {
                                 if (summary.vegBreakdown.isNotEmpty()) showPopupFor = "🥦 Vegetables" to summary.vegBreakdown
                             }
-                            MicroItem("🍎 Fruit", "${summary.fruitGrams.toInt()} g", modifier = Modifier.width(96.dp)) {
+                            MicroItem("🍎 Fruit", "${summary.fruitGrams.toInt()} g", modifier = Modifier.weight(1f)) {
                                 if (summary.fruitBreakdown.isNotEmpty()) showPopupFor = "🍎 Fruits" to summary.fruitBreakdown
                             }
                             val totalVegFruit = (summary.vegGrams + summary.fruitGrams).toInt()
-                            MicroItem("🥗 Total", "$totalVegFruit/400g", modifier = Modifier.width(108.dp)) {
+                            MicroItem("🥗 Total", "$totalVegFruit/400g", modifier = Modifier.weight(1f)) {
                                 if (summary.vegFruitBreakdown.isNotEmpty()) showPopupFor = "🥗 Vegetables & Fruits" to summary.vegFruitBreakdown
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(24.dp))
-                        HorizontalDivider(color = Color(0xFF2C2C2C))
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
+                        HorizontalDivider(color = Color(0xFF2C2C2C), thickness = 1.dp)
+                        Spacer(modifier = Modifier.height(10.dp))
 
                         DailyDiarySpoiler(
                             diaryResponse = state.diaryResponse,
@@ -594,28 +599,36 @@ fun MacroItem(name: String, amount: Double, color: Color, onClick: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .clickable { onClick() }
-            .padding(8.dp)
+            .padding(horizontal = 10.dp, vertical = 2.dp)
     ) {
-        Text(name, color = color, fontWeight = FontWeight.Bold)
-        Text("${amount.toInt()} g", color = Color.White)
+        Text(name, color = color, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        Text("${amount.toInt()} g", color = Color.White, fontSize = 14.sp)
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MicroItem(icon: String, value: String, modifier: Modifier = Modifier.width(100.dp), onClick: () -> Unit) {
+fun MicroItem(
+    icon: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
     Card(
         onClick = onClick,
         colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
+        shape = RoundedCornerShape(12.dp),
         modifier = modifier
     ) {
         Column(
-            modifier = Modifier.padding(vertical = 12.dp, horizontal = 4.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp, horizontal = 2.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(icon, fontSize = 15.sp, color = Color.White, maxLines = 1)
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(value, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color.White, maxLines = 1)
+            Text(icon, fontSize = 12.sp, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(value, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
