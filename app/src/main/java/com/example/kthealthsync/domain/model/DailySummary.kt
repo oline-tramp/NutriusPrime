@@ -22,5 +22,7 @@ data class DailySummary(
     val fruitGrams: Double = 0.0,
     val vegBreakdown: List<FoodBreakdown> = emptyList(),
     val fruitBreakdown: List<FoodBreakdown> = emptyList(),
-    val vegFruitBreakdown: List<FoodBreakdown> = emptyList()
+    val vegFruitBreakdown: List<FoodBreakdown> = emptyList(),
+    val supplementCount: Int = 0,
+    val supplementBreakdown: List<FoodBreakdown> = emptyList()
 )

@@ -191,8 +191,13 @@ class KalorickeRepository(
             if (cat == FoodCategory.VEGETABLE || cat == FoodCategory.FRUIT) NutrientUtils.parsePortionGrams(f.unit) else 0.0
         }, withMeals)
 
+        val supplementBreakdown = NutrientUtils.aggregateMacro(allFoodstuffs, { f ->
+            if (getFoodCategorySync(f) == FoodCategory.SUPPLEMENT) NutrientUtils.parseSupplementCount(f.unit) else 0.0
+        }, withMeals)
+
         val vegGrams = vegBreakdown.sumOf { it.amount }
         val fruitGrams = fruitBreakdown.sumOf { it.amount }
+        val supplementCount = supplementBreakdown.sumOf { it.amount }.toInt()
 
         val summary = DailySummary(
             kcal = kcal,
@@ -216,7 +221,9 @@ class KalorickeRepository(
             fruitGrams = fruitGrams,
             vegBreakdown = vegBreakdown,
             fruitBreakdown = fruitBreakdown,
-            vegFruitBreakdown = vegFruitBreakdown
+            vegFruitBreakdown = vegFruitBreakdown,
+            supplementCount = supplementCount,
+            supplementBreakdown = supplementBreakdown
         )
 
         return summary to diaryResponse

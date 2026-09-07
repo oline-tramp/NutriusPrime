@@ -44,6 +44,25 @@ object NutrientUtils {
     }
 
     /**
+     * Parses the count/dose of supplements (tablets, capsules, portions, etc.).
+     */
+    fun parseSupplementCount(unitStr: String?): Double {
+        if (unitStr.isNullOrBlank()) return 1.0
+        val normalized = unitStr.replace("\u00a0", " ").replace(",", ".").trim()
+        val multMatch = "([\\d.]+)\\s*x".toRegex().find(normalized)
+        if (multMatch != null) {
+            val mult = multMatch.groupValues[1].toDoubleOrNull() ?: 1.0
+            return if (mult > 0) mult else 1.0
+        }
+        val firstNum = "^([\\d.]+)".toRegex().find(normalized)
+        if (firstNum != null) {
+            val num = firstNum.groupValues[1].toDoubleOrNull() ?: 1.0
+            return if (num > 0) num else 1.0
+        }
+        return 1.0
+    }
+
+    /**
      * Parses the liquid volume in milliliters (ml) for beverages and hydration.
      * Accurately extracts fluid amounts from unit strings like "200 x 1 ml", "3 x 100 ml",
      * "1 111 x 1 ml", "1 x 1.5 l", "balení (1 000 ml)", etc.
@@ -400,6 +419,9 @@ object NutrientUtils {
             if (href.startsWith("/ovoce")) {
                 return FoodCategory.FRUIT
             }
+            if (href.startsWith("/doplnky-vyzivy")) {
+                return FoodCategory.SUPPLEMENT
+            }
         }
         return FoodCategory.OTHER
     }
@@ -525,6 +547,9 @@ object NutrientUtils {
         val vegFruitDiff = vegFruitTarget - totalVegFruit
         val vegFruitDiffStr = if (vegFruitDiff > 0.5) "не хватает: ${vegFruitDiff.toInt()} г" else "норма выполнена"
         sb.appendLine("• Овощи и фрукты (норма ВОЗ): ${totalVegFruit.toInt()} / ${vegFruitTarget.toInt()} г (овощи: ${summary.vegGrams.toInt()} г, фрукты: ${summary.fruitGrams.toInt()} г, $vegFruitDiffStr)")
+        if (summary.supplementCount > 0) {
+            sb.appendLine("• 💊 Суплементы / витамины: ${summary.supplementCount} шт.")
+        }
 
         sb.appendLine()
         sb.appendLine("🍽 СЪЕДЕННЫЕ ПРИЁМЫ ПИЩИ:")
@@ -684,7 +709,8 @@ object NutrientUtils {
                 "salt_g" to summary.salt,
                 "water_ml" to summary.water,
                 "vegetables_g" to summary.vegGrams,
-                "fruits_g" to summary.fruitGrams
+                "fruits_g" to summary.fruitGrams,
+                "supplements_count" to summary.supplementCount
             ),
             "goals" to linkedMapOf(
                 "kcal" to goals.kcal,

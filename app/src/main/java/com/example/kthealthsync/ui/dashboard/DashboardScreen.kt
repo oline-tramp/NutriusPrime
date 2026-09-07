@@ -372,7 +372,7 @@ fun DashboardScreen(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // Micros Row 2 (3 items)
+                        // Micros Row 2 (4 items)
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -386,6 +386,9 @@ fun DashboardScreen(
                             val totalVegFruit = (summary.vegGrams + summary.fruitGrams).toInt()
                             MicroItem("🥗 Total", "$totalVegFruit/400g", modifier = Modifier.weight(1f)) {
                                 if (summary.vegFruitBreakdown.isNotEmpty()) showPopupFor = "🥗 Vegetables & Fruits" to summary.vegFruitBreakdown
+                            }
+                            MicroItem("💊 Supps", "${summary.supplementCount} pcs", modifier = Modifier.weight(1f)) {
+                                if (summary.supplementBreakdown.isNotEmpty()) showPopupFor = "💊 Supplements" to summary.supplementBreakdown
                             }
                         }
 
@@ -637,7 +640,8 @@ fun MicroItem(
 fun RecursiveBreakdownItem(item: FoodBreakdown, title: String, grandTotal: Double, depth: Int = 0) {
     var expanded by remember { mutableStateOf(false) }
     val pct = if (grandTotal > 0) (item.amount / grandTotal) * 100 else 0.0
-    val unitStr = if (title == "Calories") "kcal" else if (title == "💧 Water") "ml" else "g"
+    val isSupp = title.contains("Supplements") || title.contains("Supps")
+    val unitStr = if (title == "Calories") "kcal" else if (title == "💧 Water") "ml" else if (isSupp) "pcs" else "g"
     val hasChildren = item.components.isNotEmpty()
 
     Column(modifier = Modifier.fillMaxWidth().padding(start = (depth * 16).dp)) {
@@ -662,7 +666,8 @@ fun RecursiveBreakdownItem(item: FoodBreakdown, title: String, grandTotal: Doubl
                 Text(item.name, maxLines = 2, overflow = TextOverflow.Ellipsis, fontSize = 14.sp)
             }
             Column(horizontalAlignment = Alignment.End) {
-                Text("${String.format(Locale.US, "%.1f", item.amount)} $unitStr", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                val amountStr = if (isSupp) "${item.amount.toInt()} $unitStr" else "${String.format(Locale.US, "%.1f", item.amount)} $unitStr"
+                Text(amountStr, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                 Text("${String.format(Locale.US, "%.1f", pct)}%", fontSize = 12.sp, color = Color.Gray)
             }
         }
