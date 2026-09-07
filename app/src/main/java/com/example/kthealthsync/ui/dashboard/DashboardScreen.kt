@@ -1082,6 +1082,8 @@ fun MealTimeGroup(
     LaunchedEffect(foods.size) {
         if (foods.size > prevFoodCount) {
             isExpanded = true
+        } else if (foods.isEmpty() && prevFoodCount > 0) {
+            isExpanded = false
         }
         prevFoodCount = foods.size
     }
