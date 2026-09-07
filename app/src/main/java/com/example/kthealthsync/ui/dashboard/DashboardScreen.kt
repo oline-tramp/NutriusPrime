@@ -2,7 +2,9 @@ package com.example.kthealthsync.ui.dashboard
 
 import android.app.DatePickerDialog
 import android.content.Intent
+import android.util.Log
 import android.widget.Toast
+import com.example.kthealthsync.DebugLogger
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -904,8 +906,41 @@ fun DailyDiarySpoiler(
                                 )
                             }
                         } else {
-                            mealTimes.forEach { mealTime ->
-                                val isDropTarget = hoveredMealId == mealTime.id && hoveredMealId != draggedFoodState?.sourceMealTimeId
+                            fun handleDrop(source: String) {
+                                val currentDrag = draggedFoodState
+                                Log.d("NutriusDrag", "handleDrop called by $source: currentDrag=${currentDrag?.food?.title}")
+                                DebugLogger.addActionLog("handleDrop ($source): food=${currentDrag?.food?.title}")
+
+                                if (currentDrag != null) {
+                                    val pointer = currentDrag.rootPointer
+                                    val directTarget = mealBounds.entries.find { (_, rect) -> rect.contains(pointer) }?.key
+                                    val targetMeal = directTarget ?: hoveredMealId
+
+                                    Log.d("NutriusDrag", "handleDrop: directTarget=$directTarget, hovered=$hoveredMealId, source=${currentDrag.sourceMealTimeId}, pointer=$pointer")
+                                    DebugLogger.addActionLog("Drop target: $targetMeal, source: ${currentDrag.sourceMealTimeId}")
+
+                                    if (!targetMeal.isNullOrBlank() && targetMeal != currentDrag.sourceMealTimeId) {
+                                        val foodId = currentDrag.food.id
+                                        if (!foodId.isNullOrBlank()) {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            Log.d("NutriusDrag", "Executing onMoveFoodToMeal(foodId=$foodId, targetMealTimeId=$targetMeal)")
+                                            DebugLogger.addActionLog("Moving ${currentDrag.food.title} to meal $targetMeal via Drag & Drop")
+                                            onMoveFoodToMeal(foodId, targetMeal)
+                                        } else {
+                                            Log.w("NutriusDrag", "foodId is null or blank for ${currentDrag.food}")
+                                            DebugLogger.addActionLog("Error: foodId is null or blank")
+                                        }
+                                    } else {
+                                        Log.d("NutriusDrag", "Drop ignored or cancelled (targetMeal=$targetMeal, sourceMeal=${currentDrag.sourceMealTimeId})")
+                                        DebugLogger.addActionLog("Drop ignored: target=$targetMeal == source=${currentDrag.sourceMealTimeId}")
+                                    }
+                                }
+                                draggedFoodState = null
+                            }
+
+                            mealTimes.forEachIndexed { index, mealTime ->
+                                val mealTimeId = mealTime.id ?: (index + 1).toString()
+                                val isDropTarget = hoveredMealId == mealTimeId && hoveredMealId != draggedFoodState?.sourceMealTimeId
 
                                 MealTimeGroup(
                                     mealTime = mealTime,
@@ -918,12 +953,14 @@ fun DailyDiarySpoiler(
                                     onSingleDelete = onSingleDelete,
                                     isDropTarget = isDropTarget,
                                     onPositioned = { rect ->
-                                        mealBounds[mealTime.id ?: ""] = rect
+                                        mealBounds[mealTimeId] = rect
                                     },
                                     onStartDrag = { food, rootPointer ->
+                                        Log.d("NutriusDrag", "onStartDrag: food=${food.title} (${food.id}), sourceMeal=$mealTimeId, pointer=$rootPointer")
+                                        DebugLogger.addActionLog("Drag start: ${food.title}")
                                         draggedFoodState = DraggedFoodState(
                                             food = food,
-                                            sourceMealTimeId = mealTime.id ?: "",
+                                            sourceMealTimeId = mealTimeId,
                                             rootPointer = rootPointer
                                         )
                                     },
@@ -932,21 +969,8 @@ fun DailyDiarySpoiler(
                                             draggedFoodState = current.copy(rootPointer = current.rootPointer + dragAmount)
                                         }
                                     },
-                                    onDragEnd = {
-                                        val currentDrag = draggedFoodState
-                                        val targetMeal = hoveredMealId
-                                        if (currentDrag != null && targetMeal != null && targetMeal != currentDrag.sourceMealTimeId) {
-                                            val foodId = currentDrag.food.id
-                                            if (!foodId.isNullOrBlank()) {
-                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                onMoveFoodToMeal(foodId, targetMeal)
-                                            }
-                                        }
-                                        draggedFoodState = null
-                                    },
-                                    onDragCancel = {
-                                        draggedFoodState = null
-                                    },
+                                    onDragEnd = { handleDrop("onDragEnd") },
+                                    onDragCancel = { handleDrop("onDragCancel") },
                                     draggedFoodId = draggedFoodState?.food?.id
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
@@ -1225,6 +1249,12 @@ fun FoodEntryRow(
     var handleCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val haptic = LocalHapticFeedback.current
 
+    val currentOnStartDrag by rememberUpdatedState(onStartDrag)
+    val currentOnDrag by rememberUpdatedState(onDrag)
+    val currentOnDragEnd by rememberUpdatedState(onDragEnd)
+    val currentOnDragCancel by rememberUpdatedState(onDragCancel)
+    val currentOnMove by rememberUpdatedState(onMove)
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1297,18 +1327,25 @@ fun FoodEntryRow(
                         detectDragGesturesAfterLongPress(
                             onDragStart = { localOffset ->
                                 val rootStart = handleCoordinates?.localToRoot(localOffset) ?: Offset.Zero
+                                Log.d("NutriusDrag", "FoodEntryRow onDragStart: food=${food.title}, rootStart=$rootStart")
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                onStartDrag(rootStart)
+                                currentOnStartDrag(rootStart)
                             },
                             onDrag = { change, dragAmount ->
                                 change.consume()
-                                onDrag(dragAmount)
+                                currentOnDrag(dragAmount)
                             },
-                            onDragEnd = { onDragEnd() },
-                            onDragCancel = { onDragCancel() }
+                            onDragEnd = {
+                                Log.d("NutriusDrag", "FoodEntryRow onDragEnd for food ${food.title}")
+                                currentOnDragEnd()
+                            },
+                            onDragCancel = {
+                                Log.d("NutriusDrag", "FoodEntryRow onDragCancel for food ${food.title}")
+                                currentOnDragCancel()
+                            }
                         )
                     }
-                    .clickable { onMove() },
+                    .clickable { currentOnMove() },
                 contentAlignment = Alignment.Center
             ) {
                 Canvas(modifier = Modifier.size(16.dp, 12.dp)) {

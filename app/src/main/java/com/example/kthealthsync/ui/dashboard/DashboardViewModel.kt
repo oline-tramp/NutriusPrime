@@ -1,6 +1,7 @@
 package com.example.kthealthsync.ui.dashboard
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.kthealthsync.DebugLogger
@@ -136,6 +137,9 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         onComplete: ((Boolean) -> Unit)? = null
     ) {
         val targetIds = ids.toSet()
+        Log.d("NutriusDrag", "moveEntries called: targetIds=$targetIds, targetTimeId=$targetTimeId, targetDate=$targetDate")
+        DebugLogger.addActionLog("moveEntries: $targetIds to meal $targetTimeId, date=$targetDate")
+
         val currentState = _uiState.value
         val isDifferentDay = !targetDate.isNullOrBlank() &&
                 targetDate != _selectedDate.value.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
@@ -143,6 +147,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         if (currentState is DashboardUiState.Success && currentState.diaryResponse?.data?.times != null) {
             val allTimes = currentState.diaryResponse.data.times
             val movedFoods = allTimes.flatMap { it.foodstuff ?: emptyList() }.filter { targetIds.contains(it.id) }
+            Log.d("NutriusDrag", "Found ${movedFoods.size} moved foods for optimistic update")
 
             val updatedTimes = if (isDifferentDay) {
                 allTimes.map { mealTime ->
@@ -169,12 +174,22 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 currentState.summary
             }
             _uiState.value = DashboardUiState.Success(updatedSummary, updatedDiary)
+            Log.d("NutriusDrag", "Optimistic UI state applied successfully")
+        } else {
+            Log.w("NutriusDrag", "Cannot apply optimistic update: currentState is not Success or times is null")
         }
 
         viewModelScope.launch {
-            val result = repository.moveDiaryEntries(targetIds, targetTimeId, targetDate)
-            loadDailyData(silent = true)
-            onComplete?.invoke(result.isSuccess)
+            try {
+                val result = repository.moveDiaryEntries(targetIds, targetTimeId, targetDate)
+                Log.d("NutriusDrag", "repository.moveDiaryEntries result: isSuccess=${result.isSuccess}")
+                loadDailyData(silent = true)
+                onComplete?.invoke(result.isSuccess)
+            } catch (e: Exception) {
+                Log.e("NutriusDrag", "repository.moveDiaryEntries exception: ${e.message}", e)
+                DebugLogger.addActionLog("moveDiaryEntries error: ${e.message}")
+                onComplete?.invoke(false)
+            }
         }
     }
 
