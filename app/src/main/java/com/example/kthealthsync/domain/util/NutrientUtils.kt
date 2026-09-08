@@ -54,7 +54,7 @@ object NutrientUtils {
             val mult = multMatch.groupValues[1].toDoubleOrNull() ?: 1.0
             return if (mult > 0) mult else 1.0
         }
-        val firstNum = "^([\\d.]+)".toRegex().find(normalized)
+        val firstNum = "([\\d.]+)".toRegex().find(normalized)
         if (firstNum != null) {
             val num = firstNum.groupValues[1].toDoubleOrNull() ?: 1.0
             return if (num > 0) num else 1.0
@@ -403,7 +403,7 @@ object NutrientUtils {
      * Starchy tubers like potatoes (/zelenina/brambory-a-topinambury or /jidla-a-prilohy/prilohy-brambory*)
      * are excluded from the WHO 400g/day fruit & vegetable recommendation.
      */
-    fun parseCategoryFromHtml(html: String): FoodCategory {
+    fun parseCategoryFromHtml(html: String, foodTitle: String? = null): FoodCategory {
         val crumbRegex = "class=\"crumb-link\"\\s+href=\"(/[^\"]+)\"".toRegex()
         val allHrefs = crumbRegex.findAll(html).map { it.groupValues[1].lowercase() }.toList()
 
@@ -420,10 +420,31 @@ object NutrientUtils {
                 return FoodCategory.FRUIT
             }
             if (href.startsWith("/doplnky-vyzivy")) {
+                val titleLower = (foodTitle ?: "").lowercase()
+                if (isProteinPowderOrBar(titleLower)) {
+                    return FoodCategory.OTHER
+                }
                 return FoodCategory.SUPPLEMENT
             }
         }
         return FoodCategory.OTHER
+    }
+
+    fun isProteinPowderOrBar(titleLower: String): Boolean {
+        if (titleLower.contains("protein") ||
+            titleLower.contains("isolate") ||
+            titleLower.contains("izolát") ||
+            titleLower.contains("izolat") ||
+            titleLower.contains("whey") ||
+            titleLower.contains("casein") ||
+            titleLower.contains("kasein") ||
+            titleLower.contains("gainer") ||
+            titleLower.contains("syrovátkový") ||
+            titleLower.contains("syrovatkovy")
+        ) {
+            return true
+        }
+        return false
     }
 
     /**

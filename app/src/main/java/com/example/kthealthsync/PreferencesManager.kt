@@ -34,10 +34,27 @@ class PreferencesManager(private val context: Context) {
         val GOAL_SALT_KEY = doublePreferencesKey("goal_salt")
         val GOAL_VEG_FRUIT_KEY = doublePreferencesKey("goal_veg_fruit")
         val GOAL_WATER_KEY = doublePreferencesKey("goal_water")
+
+        private const val CATEGORY_CACHE_VERSION = 2
+        private const val PREF_CATEGORY_CACHE_VERSION = "__cat_cache_ver__"
     }
 
     private val categoryPrefs by lazy {
-        context.getSharedPreferences("food_categories", Context.MODE_PRIVATE)
+        val sharedPrefs = context.getSharedPreferences("food_categories", Context.MODE_PRIVATE)
+        val currentVersion = sharedPrefs.getInt(PREF_CATEGORY_CACHE_VERSION, 1)
+        if (currentVersion < CATEGORY_CACHE_VERSION) {
+            val editor = sharedPrefs.edit()
+            // Invalidate entries previously cached as "OTHER"
+            // because in earlier versions, supplements were classified as OTHER
+            for ((key, value) in sharedPrefs.all) {
+                if (value == "OTHER") {
+                    editor.remove(key)
+                }
+            }
+            editor.putInt(PREF_CATEGORY_CACHE_VERSION, CATEGORY_CACHE_VERSION)
+            editor.apply()
+        }
+        sharedPrefs
     }
 
     val cookieFlow: Flow<String> = context.dataStore.data.map { it[COOKIE_KEY] ?: "" }
@@ -104,5 +121,9 @@ class PreferencesManager(private val context: Context) {
 
     fun saveFoodCategory(guidOrUrl: String, categoryName: String) {
         categoryPrefs.edit().putString(guidOrUrl, categoryName).apply()
+    }
+
+    fun clearFoodCategories() {
+        categoryPrefs.edit().clear().putInt(PREF_CATEGORY_CACHE_VERSION, CATEGORY_CACHE_VERSION).apply()
     }
 }

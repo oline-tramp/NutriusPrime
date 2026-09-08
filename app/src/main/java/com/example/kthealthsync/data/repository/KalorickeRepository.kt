@@ -159,7 +159,7 @@ class KalorickeRepository(
         }
 
         coroutineScope {
-            leafFoods.distinctBy { it.guid ?: it.title }.map { food ->
+            leafFoods.distinctBy { it.guid ?: it.title ?: it.name ?: it.nazev }.map { food ->
                 async { getFoodCategory(food) }
             }.awaitAll()
         }
@@ -230,12 +230,19 @@ class KalorickeRepository(
     }
 
     fun getFoodCategorySync(food: Foodstuff): FoodCategory {
-        val key = food.guid ?: food.title ?: return FoodCategory.OTHER
-        return categoryMemoryCache[key] ?: FoodCategory.OTHER
+        val key = food.guid ?: food.title ?: food.name ?: food.nazev ?: return FoodCategory.OTHER
+        categoryMemoryCache[key]?.let { return it }
+        val persisted = prefs.getFoodCategory(key)
+        if (persisted != null) {
+            val cat = try { FoodCategory.valueOf(persisted) } catch (_: Exception) { FoodCategory.OTHER }
+            categoryMemoryCache[key] = cat
+            return cat
+        }
+        return FoodCategory.OTHER
     }
 
     suspend fun getFoodCategory(food: Foodstuff): FoodCategory {
-        val key = food.guid ?: food.title ?: return FoodCategory.OTHER
+        val key = food.guid ?: food.title ?: food.name ?: food.nazev ?: return FoodCategory.OTHER
         categoryMemoryCache[key]?.let { return it }
 
         val persisted = prefs.getFoodCategory(key)
@@ -283,7 +290,7 @@ class KalorickeRepository(
             val fullUrl = if (itemUrl.contains("/")) itemUrl else "potraviny/$itemUrl"
             val htmlUrl = "https://www.kaloricketabulky.cz/$fullUrl"
             val htmlResp = api.getFoodHtml(htmlUrl, cookie).string()
-            NutrientUtils.parseCategoryFromHtml(htmlResp)
+            NutrientUtils.parseCategoryFromHtml(htmlResp, food.title ?: food.name ?: food.nazev)
         } catch (e: Exception) {
             DebugLogger.addActionLog("Failed to fetch food category HTML for $itemUrl: ${e.message}")
             FoodCategory.OTHER

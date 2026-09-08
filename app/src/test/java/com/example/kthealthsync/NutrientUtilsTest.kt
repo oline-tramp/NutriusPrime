@@ -1,6 +1,7 @@
 package com.example.kthealthsync
 
 import com.example.kthealthsync.domain.model.DailySummary
+import com.example.kthealthsync.domain.model.FoodCategory
 import com.example.kthealthsync.domain.model.NutrientGoals
 import com.example.kthealthsync.domain.util.NutrientUtils
 import org.junit.Assert.assertEquals
@@ -580,6 +581,49 @@ class NutrientUtilsTest {
         org.junit.Assert.assertEquals("5", NutrientUtils.getDefaultMealTimeGuid("07.09.2026", options, java.time.LocalTime.of(19, 20), today))
         // 22:10 -> Second Dinner ("6")
         org.junit.Assert.assertEquals("6", NutrientUtils.getDefaultMealTimeGuid("07.09.2026", options, java.time.LocalTime.of(22, 10), today))
+    }
+
+    @Test
+    fun testParseSupplementCount() {
+        org.junit.Assert.assertEquals(3.0, NutrientUtils.parseSupplementCount("3 x 1 g"), 0.001)
+        org.junit.Assert.assertEquals(1.0, NutrientUtils.parseSupplementCount("1 g"), 0.001)
+        org.junit.Assert.assertEquals(2.0, NutrientUtils.parseSupplementCount("2 x 1 g"), 0.001)
+        org.junit.Assert.assertEquals(8.0, NutrientUtils.parseSupplementCount("8 x 1 g"), 0.001)
+        org.junit.Assert.assertEquals(1.0, NutrientUtils.parseSupplementCount("1 tableta"), 0.001)
+        org.junit.Assert.assertEquals(2.0, NutrientUtils.parseSupplementCount("2 kapsle"), 0.001)
+        org.junit.Assert.assertEquals(1.0, NutrientUtils.parseSupplementCount(null), 0.001)
+        org.junit.Assert.assertEquals(1.0, NutrientUtils.parseSupplementCount(""), 0.001)
+    }
+
+    @Test
+    fun testParseCategoryFromHtml_SupplementsAndProtein() {
+        val suppHtml = """
+            <nav class="breadcrumb">
+                <a class="crumb-link" href="/tabulka-potravin">Tabulka potravin</a>
+                <a class="crumb-link" href="/doplnky-vyzivy">Doplňky výživy</a>
+                <a class="crumb-link" href="/doplnky-vyzivy/vitaminy-mineraly-sirupy-kapky">Vitamíny a minerály</a>
+            </nav>
+        """.trimIndent()
+
+        // Supplements: vitamins, minerals, rhodiola, carnitine
+        org.junit.Assert.assertEquals(FoodCategory.SUPPLEMENT, NutrientUtils.parseCategoryFromHtml(suppHtml, "Magne B6 470mg, 5mg Sanofi"))
+        org.junit.Assert.assertEquals(FoodCategory.SUPPLEMENT, NutrientUtils.parseCategoryFromHtml(suppHtml, "OMEGA 3 rybí olej 1000 mg Nutricius"))
+        org.junit.Assert.assertEquals(FoodCategory.SUPPLEMENT, NutrientUtils.parseCategoryFromHtml(suppHtml, "Carnitine tabs 1000mg GymBeam"))
+        org.junit.Assert.assertEquals(FoodCategory.SUPPLEMENT, NutrientUtils.parseCategoryFromHtml(suppHtml, "Multivit 10 Dr.Max"))
+        org.junit.Assert.assertEquals(FoodCategory.SUPPLEMENT, NutrientUtils.parseCategoryFromHtml(suppHtml, "Rodiola Rosea VemoHerb"))
+        org.junit.Assert.assertEquals(FoodCategory.SUPPLEMENT, NutrientUtils.parseCategoryFromHtml(suppHtml, "Citrulline Malate"))
+
+        val fitnessHtml = """
+            <nav class="breadcrumb">
+                <a class="crumb-link" href="/tabulka-potravin">Tabulka potravin</a>
+                <a class="crumb-link" href="/doplnky-vyzivy">Doplňky výživy</a>
+                <a class="crumb-link" href="/doplnky-vyzivy/fitness-doplnky">Fitness doplňky</a>
+            </nav>
+        """.trimIndent()
+
+        // Protein powder is excluded from pill supplements count
+        org.junit.Assert.assertEquals(FoodCategory.OTHER, NutrientUtils.parseCategoryFromHtml(fitnessHtml, "IsoPrime CFM Isolate Vanilla Cream flavour Amix Nutrition"))
+        org.junit.Assert.assertEquals(FoodCategory.OTHER, NutrientUtils.parseCategoryFromHtml(fitnessHtml, "100% Whey Protein"))
     }
 }
 

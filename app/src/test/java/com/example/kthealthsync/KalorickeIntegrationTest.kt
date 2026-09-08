@@ -1,5 +1,6 @@
 package com.example.kthealthsync
 
+import com.example.kthealthsync.domain.model.FoodCategory
 import com.example.kthealthsync.domain.util.NutrientUtils
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -121,5 +122,84 @@ class KalorickeIntegrationTest {
         println("Borsh logged protein: $borshLoggedProtein. Sum of components: $totalBorshProteinFromComponents")
         
         assertEquals(borshLoggedProtein, totalBorshProteinFromComponents, 1.0)
+    }
+
+    @Test
+    fun testYesterdaySupplements() = runBlocking {
+        println("Using cookie starting with: ${cookie.take(20)}...")
+        val api = RetrofitClient.instance
+        
+        listOf("01.09.2026", "02.09.2026", "03.09.2026", "04.09.2026", "05.09.2026", "06.09.2026", "07.09.2026", "08.09.2026").forEach { testDate ->
+            val dResp = api.getDiary(testDate, cookie)
+            val allF = dResp.data?.times?.flatMap { it.foodstuff ?: emptyList() } ?: emptyList()
+            val citrulin = allF.filter { (it.title ?: "").contains("citrul", ignoreCase = true) || (it.title ?: "").contains("malat", ignoreCase = true) }
+            if (citrulin.isNotEmpty()) {
+                println(">>> Found on $testDate: ${citrulin.map { "${it.title} (unit=${it.unit})" }}")
+            }
+        }
+
+        try {
+            val freq = api.getFrequentFoodstuff(0, 50, cookie)
+            val matchingFreq = freq.filter { (it.title ?: "").contains("citrul", ignoreCase = true) || (it.title ?: "").contains("malat", ignoreCase = true) }
+            println(">>> Matching frequent items: ${matchingFreq.map { "${it.title} (url=${it.url})" }}")
+        } catch (e: Exception) {
+            println("getFrequentFoodstuff error: ${e.message}")
+        }
+        
+        try {
+            val html = api.getFoodHtml("https://www.kaloricketabulky.cz/potraviny/citrulline-malate", cookie).string()
+            val crumbRegex = "class=\"crumb-link\"\\s+href=\"(/[^\"]+)\"".toRegex()
+            val allHrefs = crumbRegex.findAll(html).map { it.groupValues[1].lowercase() }.toList()
+            println(">>> citrulline-malate crumb-links: $allHrefs")
+        } catch (e: Exception) {
+            println("citrulline-malate error: ${e.message}")
+        }
+        
+        val diaryResp = api.getDiary("07.09.2026", cookie)
+        val times = diaryResp.data?.times ?: emptyList()
+        println("Times count: ${times.size}")
+        times.forEach { meal ->
+            println("=== Meal: ${meal.title ?: meal.name} (id=${meal.id}) ===")
+            meal.foodstuff?.forEach { f ->
+                println("Food: title='${f.title ?: f.name}' unit='${f.unit}' energy='${f.energy}' guid='${f.guid}' id='${f.id}'")
+                
+                // Fetch food form to get URL
+                var itemUrl: String? = null
+                if (f.guid != null) {
+                    try {
+                        val form = api.getFoodForm(f.guid!!, cookie)
+                        itemUrl = form.data?.url
+                        println("  -> from getFoodForm: url=$itemUrl")
+                    } catch (e: Exception) {
+                        println("  -> getFoodForm error: ${e.message}")
+                    }
+                }
+                if (itemUrl.isNullOrBlank()) {
+                    val title = f.title ?: f.name ?: f.nazev
+                    if (!title.isNullOrBlank()) {
+                        try {
+                            val search = api.searchFood(title, 0, cookie)
+                            itemUrl = search.firstOrNull()?.url
+                            println("  -> from searchFood: url=$itemUrl")
+                        } catch (e: Exception) {
+                            println("  -> searchFood error: ${e.message}")
+                        }
+                    }
+                }
+                
+                if (!itemUrl.isNullOrBlank()) {
+                    val fullUrl = if (itemUrl.contains("/")) itemUrl else "potraviny/$itemUrl"
+                    val htmlUrl = "https://www.kaloricketabulky.cz/$fullUrl"
+                    try {
+                        val html = api.getFoodHtml(htmlUrl, cookie).string()
+                        val category = NutrientUtils.parseCategoryFromHtml(html, f.title ?: f.name ?: f.nazev)
+                        val count = if (category == FoodCategory.SUPPLEMENT) NutrientUtils.parseSupplementCount(f.unit) else 0.0
+                        println("  -> category=$category, count=$count")
+                    } catch (e: Exception) {
+                        println("  -> getFoodHtml error: ${e.message}")
+                    }
+                }
+            }
+        }
     }
 }
