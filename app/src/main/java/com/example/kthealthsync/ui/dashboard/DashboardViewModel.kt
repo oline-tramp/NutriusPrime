@@ -265,6 +265,28 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         return repository.getFoodMacrosFromWeb(itemUrl, formUrl)
     }
 
+    fun addFoodEntry(
+        request: AddFoodRequest,
+        onComplete: ((Boolean) -> Unit)? = null
+    ) {
+        viewModelScope.launch {
+            try {
+                val addResp = repository.addFoodstuff(request)
+                if (addResp.code == 0 || addResp.code == null) {
+                    loadDailyData(silent = true)
+                    onComplete?.invoke(true)
+                } else {
+                    DebugLogger.addActionLog("addFoodEntry failed to add: ${addResp.message}")
+                    onComplete?.invoke(false)
+                }
+            } catch (e: Exception) {
+                Log.e("NutriusPrime", "addFoodEntry error: ${e.message}", e)
+                DebugLogger.addActionLog("addFoodEntry error: ${e.message}")
+                onComplete?.invoke(false)
+            }
+        }
+    }
+
     fun editFoodEntry(
         oldEntryId: String,
         request: AddFoodRequest,

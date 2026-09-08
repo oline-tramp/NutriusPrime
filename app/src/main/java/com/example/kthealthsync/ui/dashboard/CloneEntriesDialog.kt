@@ -21,6 +21,7 @@ import java.time.LocalDate
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CloneEntriesDialog(
     count: Int,
@@ -30,6 +31,8 @@ fun CloneEntriesDialog(
 ) {
     val context = LocalContext.current
     var selectedMealTimeId by remember { mutableStateOf("1") }
+    var mealExpanded by remember { mutableStateOf(false) }
+    val mealOptions = remember { NutrientUtils.STANDARD_MEAL_OPTIONS }
     var targetDate by remember { mutableStateOf(currentDate.toLocalDate()) }
     val formatter = remember { DateTimeFormatter.ofPattern("dd.MM.yyyy") }
 
@@ -106,34 +109,37 @@ fun CloneEntriesDialog(
                 HorizontalDivider(color = Color(0xFF2C2C2C))
                 Spacer(modifier = Modifier.height(12.dp))
 
-                Text(
-                    text = "Приём пищи:",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color.White
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                NutrientUtils.STANDARD_MEAL_OPTIONS.forEach { (id, label) ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { selectedMealTimeId = id }
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                // Meal Time Combobox
+                ExposedDropdownMenuBox(
+                    expanded = mealExpanded,
+                    onExpandedChange = { mealExpanded = !mealExpanded },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    OutlinedTextField(
+                        value = mealOptions.find { it.first == selectedMealTimeId }?.second ?: "Выберите приём",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Приём пищи", fontSize = 12.sp) },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = mealExpanded) },
+                        modifier = Modifier.fillMaxWidth().menuAnchor(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = Color(0xFF444444)
+                        )
+                    )
+                    ExposedDropdownMenu(
+                        expanded = mealExpanded,
+                        onDismissRequest = { mealExpanded = false }
                     ) {
-                        RadioButton(
-                            selected = selectedMealTimeId == id,
-                            onClick = { selectedMealTimeId = id },
-                            colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.primary)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = label,
-                            fontSize = 13.sp,
-                            color = Color.LightGray
-                        )
+                        mealOptions.forEach { (id, label) ->
+                            DropdownMenuItem(
+                                text = { Text(label) },
+                                onClick = {
+                                    selectedMealTimeId = id
+                                    mealExpanded = false
+                                }
+                            )
+                        }
                     }
                 }
             }

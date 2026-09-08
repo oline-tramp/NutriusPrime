@@ -87,9 +87,10 @@ fun EditFoodDialog(
     initialMealTimeId: String,
     currentDate: ZonedDateTime,
     viewModel: DashboardViewModel,
+    isClone: Boolean = false,
     onDismiss: () -> Unit,
     onSuccess: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -207,9 +208,9 @@ fun EditFoodDialog(
         title = {
             Column {
                 Text(
-                    text = "✏️ Редактирование",
+                    text = if (isClone) "📋 Клонирование" else "✏️ Редактирование",
                     fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = if (isClone) Color(0xFF81C784) else MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.SemiBold
                 )
                 Spacer(modifier = Modifier.height(2.dp))
@@ -471,54 +472,74 @@ fun EditFoodDialog(
                             unitOptions = listOf(UnitOption(unitGuid, unitTitle, unitMult))
                         )
 
-                        viewModel.editFoodEntry(
-                            oldEntryId = food.id,
-                            request = request
-                        ) { success ->
-                            isSubmitting = false
-                            if (success) {
-                                onSuccess()
-                            } else {
-                                errorMsg = "Ошибка сохранения изменений"
+                        if (isClone) {
+                            viewModel.addFoodEntry(request = request) { success ->
+                                isSubmitting = false
+                                if (success) {
+                                    onSuccess()
+                                } else {
+                                    errorMsg = "Ошибка клонирования записи"
+                                }
+                            }
+                        } else {
+                            viewModel.editFoodEntry(
+                                oldEntryId = food.id,
+                                request = request
+                            ) { success ->
+                                isSubmitting = false
+                                if (success) {
+                                    onSuccess()
+                                } else {
+                                    errorMsg = "Ошибка сохранения изменений"
+                                }
                             }
                         }
                     }
                 },
                 enabled = !isLoadingOptions && !isSubmitting && amountText.isNotBlank(),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = Color.Black
+                    containerColor = if (isClone) Color(0xFF2E7D32) else MaterialTheme.colorScheme.primary,
+                    contentColor = if (isClone) Color.White else Color.Black
                 )
             ) {
                 if (isSubmitting) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.Black)
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        color = if (isClone) Color.White else Color.Black
+                    )
                 } else {
-                    Text("Сохранить", fontWeight = FontWeight.Bold)
+                    Text(if (isClone) "Клонировать" else "Сохранить", fontWeight = FontWeight.Bold)
                 }
             }
         },
         dismissButton = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(
-                    onClick = { showDeleteConfirmation = true },
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = "Удалить",
-                        tint = Color(0xFFEF5350),
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.width(4.dp))
+            if (isClone) {
                 TextButton(onClick = onDismiss) {
                     Text("Отмена", color = Color.LightGray)
+                }
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = { showDeleteConfirmation = true },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Удалить",
+                            tint = Color(0xFFEF5350),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(4.dp))
+                    TextButton(onClick = onDismiss) {
+                        Text("Отмена", color = Color.LightGray)
+                    }
                 }
             }
         }
     )
 
-    if (showDeleteConfirmation) {
+    if (!isClone && showDeleteConfirmation) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirmation = false },
             title = { Text("Удалить запись?") },
