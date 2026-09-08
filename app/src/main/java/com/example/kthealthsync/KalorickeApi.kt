@@ -54,7 +54,8 @@ data class Foodstuff(
     val unit: String? = null,
     val id: String? = null,
     val guidType: String? = null,
-    val type: String? = null
+    val type: String? = null,
+    val url: String? = null
 )
 
 data class MealListResponse(

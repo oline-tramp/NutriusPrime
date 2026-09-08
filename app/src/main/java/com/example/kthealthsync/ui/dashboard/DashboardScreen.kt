@@ -24,11 +24,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.LayoutCoordinates
@@ -41,6 +43,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
@@ -224,11 +227,17 @@ fun DashboardScreen(
         var showDeleteDialog by remember { mutableStateOf(false) }
         var singleMoveTargetId by remember { mutableStateOf<String?>(null) }
         var singleDeleteTargetId by remember { mutableStateOf<String?>(null) }
+        var showCloneDialog by remember { mutableStateOf(false) }
+        var singleCloneTargetFood by remember { mutableStateOf<Foodstuff?>(null) }
+        var showEditDialog by remember { mutableStateOf(false) }
+        var editTarget by remember { mutableStateOf<Pair<Foodstuff, String>?>(null) }
 
-        val allValidIds = remember(uiState) {
+        val allValidFoods = remember(uiState) {
             (uiState as? DashboardUiState.Success)?.diaryResponse?.data?.times
-                ?.flatMap { it.foodstuff ?: emptyList() }
-                ?.mapNotNull { it.id }?.toSet() ?: emptySet()
+                ?.flatMap { it.foodstuff ?: emptyList() } ?: emptyList()
+        }
+        val allValidIds = remember(allValidFoods) {
+            allValidFoods.mapNotNull { it.id }.toSet()
         }
         LaunchedEffect(allValidIds) {
             selectedEntryIds = selectedEntryIds.intersect(allValidIds)
@@ -525,12 +534,29 @@ fun DashboardScreen(
                                 singleMoveTargetId = id
                                 showMoveDialog = true
                             },
+                            onSingleClone = { food ->
+                                singleCloneTargetFood = food
+                                showCloneDialog = true
+                            },
                             onSingleDelete = { id ->
                                 singleDeleteTargetId = id
                                 showDeleteDialog = true
                             },
+                            onEditFood = { food, mealTimeId ->
+                                editTarget = food to mealTimeId
+                                showEditDialog = true
+                            },
                             onMoveFoodToMeal = { id, targetMealTimeId ->
                                 viewModel.moveEntries(setOf(id), targetMealTimeId, null)
+                            },
+                            onCloneFoodToMeal = { food, targetMealTimeId ->
+                                viewModel.cloneEntries(listOf(food), targetMealTimeId, null) { success ->
+                                    if (success) {
+                                        Toast.makeText(context, "Запись клонирована", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        Toast.makeText(context, "Ошибка при клонировании", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
                             }
                         )
 
@@ -612,6 +638,30 @@ fun DashboardScreen(
 
                             FilledTonalButton(
                                 onClick = {
+                                    singleCloneTargetFood = null
+                                    showCloneDialog = true
+                                },
+                                colors = ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = Color(0xFF1E3F2E),
+                                    contentColor = Color(0xFF81C784)
+                                ),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.height(34.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ContentCopy,
+                                    contentDescription = "Клонировать",
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Клон", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            }
+
+                            Spacer(modifier = Modifier.width(6.dp))
+
+                            FilledTonalButton(
+                                onClick = {
                                     singleDeleteTargetId = null
                                     showDeleteDialog = true
                                 },
@@ -659,6 +709,69 @@ fun DashboardScreen(
                         showMoveDialog = false
                         singleMoveTargetId = null
                         selectedEntryIds = emptySet()
+                    }
+                )
+            }
+        }
+
+        // Clone Dialog
+        if (showCloneDialog) {
+            val targetFoods = singleCloneTargetFood?.let { listOf(it) } ?: allValidFoods.filter { selectedEntryIds.contains(it.id) }
+            if (targetFoods.isNotEmpty()) {
+                CloneEntriesDialog(
+                    count = targetFoods.size,
+                    currentDate = selectedDate,
+                    onDismiss = {
+                        showCloneDialog = false
+                        singleCloneTargetFood = null
+                    },
+                    onConfirm = { targetTimeId, targetDateStr ->
+                        viewModel.cloneEntries(targetFoods, targetTimeId, targetDateStr) { success ->
+                            if (success) {
+                                Toast.makeText(context, "Записи успешно клонированы", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(context, "Ошибка при клонировании", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        showCloneDialog = false
+                        singleCloneTargetFood = null
+                        selectedEntryIds = emptySet()
+                    }
+                )
+            }
+        }
+
+        // Edit Food Dialog
+        if (showEditDialog) {
+            editTarget?.let { (food, mealTimeId) ->
+                EditFoodDialog(
+                    food = food,
+                    initialMealTimeId = mealTimeId,
+                    currentDate = selectedDate,
+                    nutrientGoals = nutrientGoals,
+                    viewModel = viewModel,
+                    onDismiss = {
+                        showEditDialog = false
+                        editTarget = null
+                    },
+                    onSuccess = {
+                        Toast.makeText(context, "Запись сохранена", Toast.LENGTH_SHORT).show()
+                        showEditDialog = false
+                        editTarget = null
+                    },
+                    onDelete = {
+                        val entryId = food.id
+                        if (!entryId.isNullOrBlank()) {
+                            viewModel.deleteEntries(setOf(entryId)) { success ->
+                                if (success) {
+                                    Toast.makeText(context, "Запись удалена", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    Toast.makeText(context, "Ошибка при удалении", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                        showEditDialog = false
+                        editTarget = null
                     }
                 )
             }
@@ -987,6 +1100,8 @@ data class DraggedFoodState(
     val rootPointer: Offset
 )
 
+enum class DropAction { MOVE, CLONE }
+
 @Composable
 fun DailyDiarySpoiler(
     diaryResponse: DiaryResponse?,
@@ -995,8 +1110,11 @@ fun DailyDiarySpoiler(
     onToggleSelect: (String) -> Unit,
     onAddFoodClick: (mealTimeGuid: String?) -> Unit,
     onSingleMove: (String) -> Unit,
+    onSingleClone: (Foodstuff) -> Unit,
     onSingleDelete: (String) -> Unit,
-    onMoveFoodToMeal: (foodId: String, targetMealTimeId: String) -> Unit
+    onEditFood: (food: Foodstuff, mealTimeId: String) -> Unit,
+    onMoveFoodToMeal: (foodId: String, targetMealTimeId: String) -> Unit,
+    onCloneFoodToMeal: (food: Foodstuff, targetMealTimeId: String) -> Unit
 ) {
     var isDiaryExpanded by rememberSaveable(dateStr) { mutableStateOf(true) }
     var draggedFoodState by remember { mutableStateOf<DraggedFoodState?>(null) }
@@ -1020,13 +1138,19 @@ fun DailyDiarySpoiler(
         prevTotalFoodCount = allFoods.size
     }
 
-    val hoveredMealId = remember(draggedFoodState?.rootPointer) {
+    val currentHoverInfo = remember(draggedFoodState?.rootPointer, mealBounds.toMap()) {
         val pointer = draggedFoodState?.rootPointer ?: return@remember null
-        mealBounds.entries.find { (_, rect) -> rect.contains(pointer) }?.key
+        val entry = mealBounds.entries.find { (_, rect) -> rect.contains(pointer) } ?: return@remember null
+        val mealId = entry.key
+        val rect = entry.value
+        val action = if (pointer.x < rect.center.x) DropAction.MOVE else DropAction.CLONE
+        mealId to action
     }
+    val hoveredMealId = currentHoverInfo?.first
+    val currentDropAction = currentHoverInfo?.second
 
-    LaunchedEffect(hoveredMealId) {
-        if (hoveredMealId != null && hoveredMealId != draggedFoodState?.sourceMealTimeId) {
+    LaunchedEffect(hoveredMealId, currentDropAction) {
+        if (hoveredMealId != null) {
             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
         }
     }
@@ -1156,26 +1280,35 @@ fun DailyDiarySpoiler(
 
                                 if (currentDrag != null) {
                                     val pointer = currentDrag.rootPointer
-                                    val directTarget = mealBounds.entries.find { (_, rect) -> rect.contains(pointer) }?.key
-                                    val targetMeal = directTarget ?: hoveredMealId
+                                    val entry = mealBounds.entries.find { (_, rect) -> rect.contains(pointer) }
+                                    val targetMeal = entry?.key ?: hoveredMealId
+                                    val rect = entry?.value ?: mealBounds[targetMeal]
+                                    val action = if (rect != null && pointer.x >= rect.center.x) DropAction.CLONE else (currentDropAction ?: DropAction.MOVE)
 
-                                    Log.d("NutriusDrag", "handleDrop: directTarget=$directTarget, hovered=$hoveredMealId, source=${currentDrag.sourceMealTimeId}, pointer=$pointer")
-                                    DebugLogger.addActionLog("Drop target: $targetMeal, source: ${currentDrag.sourceMealTimeId}")
+                                    Log.d("NutriusDrag", "handleDrop: targetMeal=$targetMeal, action=$action, source=${currentDrag.sourceMealTimeId}, pointer=$pointer")
+                                    DebugLogger.addActionLog("Drop target: $targetMeal ($action), source: ${currentDrag.sourceMealTimeId}")
 
-                                    if (!targetMeal.isNullOrBlank() && targetMeal != currentDrag.sourceMealTimeId) {
-                                        val foodId = currentDrag.food.id
-                                        if (!foodId.isNullOrBlank()) {
+                                    if (!targetMeal.isNullOrBlank()) {
+                                        if (action == DropAction.CLONE) {
                                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                            Log.d("NutriusDrag", "Executing onMoveFoodToMeal(foodId=$foodId, targetMealTimeId=$targetMeal)")
-                                            DebugLogger.addActionLog("Moving ${currentDrag.food.title} to meal $targetMeal via Drag & Drop")
-                                            onMoveFoodToMeal(foodId, targetMeal)
+                                            Log.d("NutriusDrag", "Executing onCloneFoodToMeal(food=${currentDrag.food.title}, targetMealTimeId=$targetMeal)")
+                                            DebugLogger.addActionLog("Cloning ${currentDrag.food.title} to meal $targetMeal via Drag & Drop")
+                                            onCloneFoodToMeal(currentDrag.food, targetMeal)
+                                        } else if (targetMeal != currentDrag.sourceMealTimeId) {
+                                            val foodId = currentDrag.food.id
+                                            if (!foodId.isNullOrBlank()) {
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                Log.d("NutriusDrag", "Executing onMoveFoodToMeal(foodId=$foodId, targetMealTimeId=$targetMeal)")
+                                                DebugLogger.addActionLog("Moving ${currentDrag.food.title} to meal $targetMeal via Drag & Drop")
+                                                onMoveFoodToMeal(foodId, targetMeal)
+                                            } else {
+                                                Log.w("NutriusDrag", "foodId is null or blank for ${currentDrag.food}")
+                                                DebugLogger.addActionLog("Error: foodId is null or blank")
+                                            }
                                         } else {
-                                            Log.w("NutriusDrag", "foodId is null or blank for ${currentDrag.food}")
-                                            DebugLogger.addActionLog("Error: foodId is null or blank")
+                                            Log.d("NutriusDrag", "Drop ignored or cancelled (targetMeal=$targetMeal, sourceMeal=${currentDrag.sourceMealTimeId})")
+                                            DebugLogger.addActionLog("Drop ignored: target=$targetMeal == source=${currentDrag.sourceMealTimeId}")
                                         }
-                                    } else {
-                                        Log.d("NutriusDrag", "Drop ignored or cancelled (targetMeal=$targetMeal, sourceMeal=${currentDrag.sourceMealTimeId})")
-                                        DebugLogger.addActionLog("Drop ignored: target=$targetMeal == source=${currentDrag.sourceMealTimeId}")
                                     }
                                 }
                                 draggedFoodState = null
@@ -1183,7 +1316,8 @@ fun DailyDiarySpoiler(
 
                             mealTimes.forEachIndexed { index, mealTime ->
                                 val mealTimeId = mealTime.id ?: (index + 1).toString()
-                                val isDropTarget = hoveredMealId == mealTimeId && hoveredMealId != draggedFoodState?.sourceMealTimeId
+                                val isDropTarget = hoveredMealId == mealTimeId
+                                val dropAction = if (isDropTarget) currentDropAction else null
 
                                 MealTimeGroup(
                                     mealTime = mealTime,
@@ -1194,8 +1328,14 @@ fun DailyDiarySpoiler(
                                         onAddFoodClick(mealTime.id)
                                     },
                                     onSingleMove = onSingleMove,
+                                    onSingleClone = onSingleClone,
                                     onSingleDelete = onSingleDelete,
+                                    onEditFood = { food ->
+                                        onEditFood(food, mealTimeId)
+                                    },
                                     isDropTarget = isDropTarget,
+                                    dropAction = dropAction,
+                                    draggedSourceMealId = draggedFoodState?.sourceMealTimeId,
                                     onPositioned = { rect ->
                                         mealBounds[mealTimeId] = rect
                                     },
@@ -1231,7 +1371,14 @@ fun DailyDiarySpoiler(
             val localOffset = dragInfo.rootPointer - spoilerRoot
             val title = dragInfo.food.title ?: dragInfo.food.name ?: dragInfo.food.nazev ?: "Продукт"
             val kcal = NutrientUtils.parseNutrient(dragInfo.food.energy).toInt()
-            val isOverValidTarget = hoveredMealId != null && hoveredMealId != dragInfo.sourceMealTimeId
+            val isCloneAction = currentDropAction == DropAction.CLONE
+            val isTargetValid = when {
+                hoveredMealId == null -> false
+                isCloneAction -> true
+                hoveredMealId != dragInfo.sourceMealTimeId -> true
+                else -> false
+            }
+            val accentColor = if (isCloneAction) Color(0xFF81C784) else Color(0xFF64B5F6)
 
             Box(
                 modifier = Modifier
@@ -1250,7 +1397,7 @@ fun DailyDiarySpoiler(
                     .border(
                         BorderStroke(
                             width = 1.5.dp,
-                            color = if (isOverValidTarget) Color(0xFF64B5F6) else Color(0xFF9E9E9E)
+                            color = if (isTargetValid) accentColor else Color(0xFF9E9E9E)
                         ),
                         RoundedCornerShape(14.dp)
                     )
@@ -1258,7 +1405,7 @@ fun DailyDiarySpoiler(
             ) {
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("✨", fontSize = 13.sp)
+                        Text(if (isCloneAction) "📋" else "✨", fontSize = 13.sp)
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = title,
@@ -1279,9 +1426,13 @@ fun DailyDiarySpoiler(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = if (isOverValidTarget) "Отпустите для переноса 📥" else "Перетащите на нужный приём",
+                            text = when {
+                                !isTargetValid -> "Перетащите на приём пищи"
+                                isCloneAction -> "Отпустите для клонирования 📋"
+                                else -> "Отпустите для переноса 📥"
+                            },
                             fontSize = 11.sp,
-                            color = if (isOverValidTarget) Color(0xFF90CAF9) else Color.LightGray
+                            color = if (isTargetValid) accentColor else Color.LightGray
                         )
                     }
                 }
@@ -1298,8 +1449,12 @@ fun MealTimeGroup(
     onToggleSelect: (String) -> Unit,
     onAddFoodClick: () -> Unit,
     onSingleMove: (String) -> Unit,
+    onSingleClone: (Foodstuff) -> Unit,
     onSingleDelete: (String) -> Unit,
+    onEditFood: (Foodstuff) -> Unit,
     isDropTarget: Boolean,
+    dropAction: DropAction?,
+    draggedSourceMealId: String?,
     onPositioned: (Rect) -> Unit,
     onStartDrag: (food: Foodstuff, rootPointer: Offset) -> Unit,
     onDrag: (dragAmount: Offset) -> Unit,
@@ -1336,7 +1491,7 @@ fun MealTimeGroup(
         ),
         border = BorderStroke(
             width = if (isDropTarget) 2.dp else 1.dp,
-            color = if (isDropTarget) Color(0xFF64B5F6) else Color(0xFF222222)
+            color = if (isDropTarget) (if (dropAction == DropAction.CLONE) Color(0xFF81C784) else Color(0xFF64B5F6)) else Color(0xFF222222)
         )
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
@@ -1401,27 +1556,78 @@ fun MealTimeGroup(
                 }
             }
 
-            // Drop indicator when an item is hovered over this meal
+            // Dual drop indicators when an item is hovered over this meal
             AnimatedVisibility(visible = isDropTarget) {
-                Box(
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 6.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFF1565C0).copy(alpha = 0.25f))
-                        .border(BorderStroke(1.dp, Color(0xFF64B5F6).copy(alpha = 0.6f)), RoundedCornerShape(8.dp))
-                        .padding(vertical = 8.dp),
-                    contentAlignment = Alignment.Center
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("📥", fontSize = 13.sp)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "Переместить в $mealDisplayName",
-                            color = Color(0xFF90CAF9),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
+                    val isMoveHovered = dropAction == DropAction.MOVE
+                    val isCloneHovered = dropAction == DropAction.CLONE
+                    val canMoveHere = mealTime.id != draggedSourceMealId
+
+                    // Left target: Move
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(
+                                if (isMoveHovered && canMoveHere) Color(0xFF1565C0).copy(alpha = 0.5f)
+                                else Color(0xFF1565C0).copy(alpha = 0.15f)
+                            )
+                            .border(
+                                BorderStroke(
+                                    if (isMoveHovered && canMoveHere) 1.5.dp else 0.5.dp,
+                                    if (isMoveHovered && canMoveHere) Color(0xFF64B5F6) else Color(0xFF1565C0)
+                                ),
+                                RoundedCornerShape(8.dp)
+                            )
+                            .padding(vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("📥", fontSize = 12.sp)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (canMoveHere) "Перенести" else "Тот же приём",
+                                color = if (canMoveHere) Color(0xFF90CAF9) else Color.Gray,
+                                fontSize = 11.sp,
+                                fontWeight = if (isMoveHovered && canMoveHere) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
+                    }
+
+                    // Right target: Clone
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(
+                                if (isCloneHovered) Color(0xFF2E7D32).copy(alpha = 0.5f)
+                                else Color(0xFF2E7D32).copy(alpha = 0.15f)
+                            )
+                            .border(
+                                BorderStroke(
+                                    if (isCloneHovered) 1.5.dp else 0.5.dp,
+                                    if (isCloneHovered) Color(0xFF81C784) else Color(0xFF2E7D32)
+                                ),
+                                RoundedCornerShape(8.dp)
+                            )
+                            .padding(vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("📋", fontSize = 12.sp)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Клонировать",
+                                color = Color(0xFFA5D6A7),
+                                fontSize = 11.sp,
+                                fontWeight = if (isCloneHovered) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
                     }
                 }
             }
@@ -1453,8 +1659,14 @@ fun MealTimeGroup(
                                 onToggleSelect = {
                                     if (foodId.isNotBlank()) onToggleSelect(foodId)
                                 },
+                                onEdit = {
+                                    onEditFood(food)
+                                },
                                 onMove = {
                                     if (foodId.isNotBlank()) onSingleMove(foodId)
+                                },
+                                onClone = {
+                                    onSingleClone(food)
                                 },
                                 onDelete = {
                                     if (foodId.isNotBlank()) onSingleDelete(foodId)
@@ -1488,7 +1700,9 @@ fun FoodEntryRow(
     isSelected: Boolean,
     isBeingDragged: Boolean,
     onToggleSelect: () -> Unit,
+    onEdit: () -> Unit,
     onMove: () -> Unit,
+    onClone: () -> Unit,
     onDelete: () -> Unit,
     onStartDrag: (rootPointer: Offset) -> Unit,
     onDrag: (dragAmount: Offset) -> Unit,
@@ -1516,35 +1730,61 @@ fun FoodEntryRow(
             .graphicsLayer {
                 alpha = if (isBeingDragged) 0.25f else 1f
             }
-            .clickable { onToggleSelect() }
-            .padding(vertical = 6.dp, horizontal = 4.dp),
+            .padding(vertical = 4.dp, horizontal = 2.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Checkbox(
-            checked = isSelected,
-            onCheckedChange = { onToggleSelect() },
-            colors = CheckboxDefaults.colors(
-                checkedColor = MaterialTheme.colorScheme.primary,
-                checkmarkColor = Color.Black,
-                uncheckedColor = Color.Gray
-            ),
-            modifier = Modifier.size(28.dp)
-        )
+        // Selection Checkbox
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .clickable { onToggleSelect() },
+            contentAlignment = Alignment.Center
+        ) {
+            Checkbox(
+                checked = isSelected,
+                onCheckedChange = { onToggleSelect() },
+                colors = CheckboxDefaults.colors(
+                    checkedColor = MaterialTheme.colorScheme.primary,
+                    checkmarkColor = Color.Black,
+                    uncheckedColor = Color.Gray
+                ),
+                modifier = Modifier.size(24.dp)
+            )
+        }
 
-        Spacer(modifier = Modifier.width(6.dp))
+        Spacer(modifier = Modifier.width(4.dp))
 
-        Column(modifier = Modifier.weight(1f)) {
+        // Food Title & Macros -> Clickable to Edit, with dashed underline on title
+        val accentDotted = MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .clip(RoundedCornerShape(6.dp))
+                .clickable { onEdit() }
+                .padding(vertical = 4.dp, horizontal = 4.dp)
+        ) {
             Text(
                 text = title,
                 fontWeight = FontWeight.Medium,
                 fontSize = 13.sp,
                 color = Color.White,
                 maxLines = 2,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.drawBehind {
+                    val strokeWidth = 1.dp.toPx()
+                    val y = size.height - strokeWidth / 2
+                    drawLine(
+                        color = accentDotted,
+                        start = Offset(0f, y),
+                        end = Offset(size.width, y),
+                        strokeWidth = strokeWidth,
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 4f), 0f)
+                    )
+                }
             )
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(top = 2.dp)
+                modifier = Modifier.padding(top = 3.dp)
             ) {
                 if (!food.unit.isNullOrBlank()) {
                     Text(
@@ -1569,12 +1809,12 @@ fun FoodEntryRow(
             }
         }
 
-        // Action Buttons: Drag handle (sandwich) & Delete
+        // Action Buttons: Drag handle (sandwich), Clone button, Delete button
         Row(verticalAlignment = Alignment.CenterVertically) {
             // Drag Handle / Move Button
             Box(
                 modifier = Modifier
-                    .size(32.dp)
+                    .size(30.dp)
                     .onGloballyPositioned { handleCoordinates = it }
                     .clip(RoundedCornerShape(8.dp))
                     .background(if (isBeingDragged) Color(0xFF1E3A5F) else Color.Transparent)
@@ -1622,6 +1862,22 @@ fun FoodEntryRow(
 
             Spacer(modifier = Modifier.width(2.dp))
 
+            // Quick Clone Button
+            IconButton(
+                onClick = onClone,
+                modifier = Modifier.size(30.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ContentCopy,
+                    contentDescription = "Клонировать",
+                    tint = Color(0xFF81C784),
+                    modifier = Modifier.size(15.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.width(2.dp))
+
+            // Delete Button
             IconButton(
                 onClick = onDelete,
                 modifier = Modifier.size(30.dp)
@@ -1630,7 +1886,7 @@ fun FoodEntryRow(
                     imageVector = Icons.Default.Delete,
                     contentDescription = "Удалить",
                     tint = Color(0xFFEF5350),
-                    modifier = Modifier.size(16.dp)
+                    modifier = Modifier.size(15.dp)
                 )
             }
         }

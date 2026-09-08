@@ -4,6 +4,9 @@ import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.kthealthsync.AddFoodRequest
+import com.example.kthealthsync.FoodFormResponse
+import com.example.kthealthsync.UnitOption
 import com.example.kthealthsync.DebugLogger
 import com.example.kthealthsync.DiaryResponse
 import com.example.kthealthsync.Foodstuff
@@ -249,6 +252,80 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             } catch (e: Exception) {
                 Log.e("NutriusDrag", "repository.moveDiaryEntries exception: ${e.message}", e)
                 DebugLogger.addActionLog("moveDiaryEntries error: ${e.message}")
+                onComplete?.invoke(false)
+            }
+        }
+    }
+
+    suspend fun getFoodForm(guid: String): FoodFormResponse {
+        return repository.getFoodForm(guid)
+    }
+
+    suspend fun getFoodMacros(itemUrl: String, formUrl: String?): Map<String, Double> {
+        return repository.getFoodMacrosFromWeb(itemUrl, formUrl)
+    }
+
+    fun editFoodEntry(
+        oldEntryId: String,
+        request: AddFoodRequest,
+        onComplete: ((Boolean) -> Unit)? = null
+    ) {
+        viewModelScope.launch {
+            try {
+                val addResp = repository.addFoodstuff(request)
+                if (addResp.code == 0 || addResp.code == null) {
+                    repository.deleteDiaryEntries(setOf(oldEntryId))
+                    loadDailyData(silent = true)
+                    onComplete?.invoke(true)
+                } else {
+                    DebugLogger.addActionLog("editFoodEntry failed to add: ${addResp.message}")
+                    onComplete?.invoke(false)
+                }
+            } catch (e: Exception) {
+                Log.e("NutriusPrime", "editFoodEntry error: ${e.message}", e)
+                DebugLogger.addActionLog("editFoodEntry error: ${e.message}")
+                onComplete?.invoke(false)
+            }
+        }
+    }
+
+    fun cloneEntries(
+        foods: List<Foodstuff>,
+        targetTimeId: String,
+        targetDate: String? = null,
+        onComplete: ((Boolean) -> Unit)? = null
+    ) {
+        val dateToUse = targetDate ?: _selectedDate.value.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+        viewModelScope.launch {
+            try {
+                var allSuccess = true
+                for (food in foods) {
+                    val guid = food.guidType ?: food.guid
+                    if (guid.isNullOrBlank()) continue
+
+                    val portion = NutrientUtils.parsePortionGrams(food.unit).coerceAtLeast(1.0)
+                    val multStr = if (portion == portion.toInt().toDouble()) portion.toInt().toString() else String.format(Locale.US, "%.1f", portion)
+
+                    val request = AddFoodRequest(
+                        guid = guid,
+                        title = food.title ?: food.name ?: food.nazev ?: "",
+                        url = food.url ?: "",
+                        date = dateToUse,
+                        multiplier = multStr,
+                        diaryTimeGuid = targetTimeId,
+                        unitGuid = "0000000000000001",
+                        unitOptions = listOf(UnitOption("0000000000000001", "1 g", 1.0))
+                    )
+                    val resp = repository.addFoodstuff(request)
+                    if (resp.code != 0 && resp.code != null) {
+                        allSuccess = false
+                    }
+                }
+                loadDailyData(silent = true)
+                onComplete?.invoke(allSuccess)
+            } catch (e: Exception) {
+                Log.e("NutriusPrime", "cloneEntries error: ${e.message}", e)
+                DebugLogger.addActionLog("cloneEntries error: ${e.message}")
                 onComplete?.invoke(false)
             }
         }
