@@ -64,6 +64,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -1755,6 +1756,7 @@ fun FoodEntryRow(
 
         // Food Title & Macros -> Clickable to Edit, with dashed underline on title
         val accentDotted = MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)
+        var textLayoutResult by remember(title) { mutableStateOf<TextLayoutResult?>(null) }
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -1769,16 +1771,36 @@ fun FoodEntryRow(
                 color = Color.White,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
+                onTextLayout = { textLayoutResult = it },
                 modifier = Modifier.drawBehind {
                     val strokeWidth = 1.dp.toPx()
-                    val y = size.height - strokeWidth / 2
-                    drawLine(
-                        color = accentDotted,
-                        start = Offset(0f, y),
-                        end = Offset(size.width, y),
-                        strokeWidth = strokeWidth,
-                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 4f), 0f)
-                    )
+                    val pathEffect = PathEffect.dashPathEffect(floatArrayOf(5f, 3f), 0f)
+                    val layout = textLayoutResult
+                    if (layout != null) {
+                        for (i in 0 until layout.lineCount) {
+                            val startX = layout.getLineLeft(i)
+                            val endX = layout.getLineRight(i)
+                            if (endX > startX) {
+                                val y = layout.getLineBottom(i) - strokeWidth / 2
+                                drawLine(
+                                    color = accentDotted,
+                                    start = Offset(startX, y),
+                                    end = Offset(endX, y),
+                                    strokeWidth = strokeWidth,
+                                    pathEffect = pathEffect
+                                )
+                            }
+                        }
+                    } else {
+                        val y = size.height - strokeWidth / 2
+                        drawLine(
+                            color = accentDotted,
+                            start = Offset(0f, y),
+                            end = Offset(size.width, y),
+                            strokeWidth = strokeWidth,
+                            pathEffect = pathEffect
+                        )
+                    }
                 }
             )
             Row(
