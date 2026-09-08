@@ -301,14 +301,20 @@ fun DashboardScreen(
                     is DashboardUiState.Success -> {
                         val summary = state.summary
                         val totalMacros = summary.protein + summary.fat + summary.carb
-                        val protSweep = if (totalMacros > 0) ((summary.protein / totalMacros) * 360).toFloat() else 0f
-                        val fatSweep = if (totalMacros > 0) ((summary.fat / totalMacros) * 360).toFloat() else 0f
-                        val carbSweep = if (totalMacros > 0) ((summary.carb / totalMacros) * 360).toFloat() else 0f
+                        val goalKcal = nutrientGoals.kcal
+
+                        // Calculate progress sweep matching calorie goal
+                        val progressRatio = if (goalKcal > 0) (summary.kcal / goalKcal).toFloat() else 1f
+                        val totalSweep = (progressRatio * 360f).coerceIn(0f, 360f)
+
+                        val protSweep = if (totalMacros > 0) ((summary.protein / totalMacros).toFloat() * totalSweep) else 0f
+                        val fatSweep = if (totalMacros > 0) ((summary.fat / totalMacros).toFloat() * totalSweep) else 0f
+                        val carbSweep = if (totalMacros > 0) ((summary.carb / totalMacros).toFloat() * totalSweep) else 0f
 
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier
-                                .size(145.dp)
+                                .size(148.dp)
                                 .clickable {
                                     if (summary.kcalBreakdown.isNotEmpty()) {
                                         showPopupFor = "Calories" to summary.kcalBreakdown
@@ -316,32 +322,97 @@ fun DashboardScreen(
                                 }
                         ) {
                             Canvas(modifier = Modifier.fillMaxSize()) {
-                                val strokeWidth = 20.dp.toPx()
-                                if (totalMacros == 0.0) {
-                                    drawArc(Color.DarkGray, 0f, 360f, false, style = Stroke(strokeWidth))
-                                } else {
-                                    drawArc(Color(0xFFE57373), -90f, protSweep, false, style = Stroke(strokeWidth, cap = StrokeCap.Round))
-                                    drawArc(Color(0xFFFFD54F), -90f + protSweep, fatSweep, false, style = Stroke(strokeWidth, cap = StrokeCap.Round))
-                                    drawArc(Color(0xFF64B5F6), -90f + protSweep + fatSweep, carbSweep, false, style = Stroke(strokeWidth, cap = StrokeCap.Round))
+                                val strokeWidth = 18.dp.toPx()
+                                // Background circular track
+                                drawArc(
+                                    color = Color(0xFF262626),
+                                    startAngle = 0f,
+                                    sweepAngle = 360f,
+                                    useCenter = false,
+                                    style = Stroke(strokeWidth)
+                                )
+
+                                if (totalSweep > 0f) {
+                                    if (totalMacros == 0.0) {
+                                        drawArc(
+                                            color = Color(0xFF81C784),
+                                            startAngle = -90f,
+                                            sweepAngle = totalSweep,
+                                            useCenter = false,
+                                            style = Stroke(strokeWidth)
+                                        )
+                                    } else {
+                                        drawArc(Color(0xFFE57373), -90f, protSweep, false, style = Stroke(strokeWidth))
+                                        drawArc(Color(0xFFFFD54F), -90f + protSweep, fatSweep, false, style = Stroke(strokeWidth))
+                                        drawArc(Color(0xFF64B5F6), -90f + protSweep + fatSweep, carbSweep, false, style = Stroke(strokeWidth))
+                                    }
                                 }
                             }
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("${summary.kcal.toInt()}", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                                Text("kcal", fontSize = 12.sp, color = Color(0xFFAAAAAA))
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Text(
+                                    text = "${summary.kcal.toInt()}",
+                                    fontSize = 26.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                                if (goalKcal > 0) {
+                                    Text(
+                                        text = "/ ${goalKcal.toInt()} kcal",
+                                        fontSize = 11.sp,
+                                        color = Color(0xFFAAAAAA)
+                                    )
+                                    val kcalPercent = (summary.kcal / goalKcal * 100).toInt()
+                                    Text(
+                                        text = "$kcalPercent%",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (kcalPercent > 105) Color(0xFFFFB74D) else Color(0xFF81C784)
+                                    )
+                                } else {
+                                    Text(
+                                        text = "kcal",
+                                        fontSize = 12.sp,
+                                        color = Color(0xFFAAAAAA)
+                                    )
+                                }
                             }
                         }
 
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        // Macros Row
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                            MacroItem("Protein", summary.protein, Color(0xFFE57373)) {
+                        // Macros Row (3 cards with color-coded progress lines and percentages)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            MacroItem(
+                                name = "Protein",
+                                amount = summary.protein,
+                                goal = nutrientGoals.protein,
+                                color = Color(0xFFE57373),
+                                modifier = Modifier.weight(1f)
+                            ) {
                                 if (summary.proteinBreakdown.isNotEmpty()) showPopupFor = "Protein" to summary.proteinBreakdown
                             }
-                            MacroItem("Fat", summary.fat, Color(0xFFFFD54F)) {
+                            MacroItem(
+                                name = "Fat",
+                                amount = summary.fat,
+                                goal = nutrientGoals.fat,
+                                color = Color(0xFFFFD54F),
+                                modifier = Modifier.weight(1f)
+                            ) {
                                 if (summary.fatBreakdown.isNotEmpty()) showPopupFor = "Fat" to summary.fatBreakdown
                             }
-                            MacroItem("Carbs", summary.carb, Color(0xFF64B5F6)) {
+                            MacroItem(
+                                name = "Carbs",
+                                amount = summary.carb,
+                                goal = nutrientGoals.carbs,
+                                color = Color(0xFF64B5F6),
+                                modifier = Modifier.weight(1f)
+                            ) {
                                 if (summary.carbBreakdown.isNotEmpty()) showPopupFor = "Carbohydrates" to summary.carbBreakdown
                             }
                         }
@@ -356,16 +427,54 @@ fun DashboardScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             val waterLiters = summary.water / 1000.0
-                            MicroItem("💧 Water", String.format(Locale.US, "%.1f L", waterLiters), modifier = Modifier.weight(1f)) {
+                            val waterGoalLiters = nutrientGoals.water / 1000.0
+                            val waterStr = if (waterGoalLiters > 0) String.format(Locale.US, "%.1f/%.1fL", waterLiters, waterGoalLiters) else String.format(Locale.US, "%.1f L", waterLiters)
+                            val waterProgress = if (nutrientGoals.water > 0) (summary.water / nutrientGoals.water).toFloat() else null
+                            MicroItem(
+                                icon = "💧 Water",
+                                value = waterStr,
+                                progress = waterProgress,
+                                progressColor = Color(0xFF4FC3F7),
+                                modifier = Modifier.weight(1f)
+                            ) {
                                 if (summary.waterBreakdown.isNotEmpty()) showPopupFor = "💧 Water" to summary.waterBreakdown
                             }
-                            MicroItem("🌾 Fiber", "${summary.fiber.toInt()} g", modifier = Modifier.weight(1f)) {
+
+                            val fiberStr = if (nutrientGoals.fiber > 0) "${summary.fiber.toInt()}/${nutrientGoals.fiber.toInt()}g" else "${summary.fiber.toInt()} g"
+                            val fiberProgress = if (nutrientGoals.fiber > 0) (summary.fiber / nutrientGoals.fiber).toFloat() else null
+                            MicroItem(
+                                icon = "🌾 Fiber",
+                                value = fiberStr,
+                                progress = fiberProgress,
+                                progressColor = Color(0xFFAED581),
+                                modifier = Modifier.weight(1f)
+                            ) {
                                 if (summary.fiberBreakdown.isNotEmpty()) showPopupFor = "🌾 Fiber" to summary.fiberBreakdown
                             }
-                            MicroItem("🍬 Sugar", "${summary.sugar.toInt()} g", modifier = Modifier.weight(1f)) {
+
+                            val sugarStr = if (nutrientGoals.sugar > 0) "${summary.sugar.toInt()}/${nutrientGoals.sugar.toInt()}g" else "${summary.sugar.toInt()} g"
+                            val sugarProgress = if (nutrientGoals.sugar > 0) (summary.sugar / nutrientGoals.sugar).toFloat() else null
+                            val sugarColor = if (nutrientGoals.sugar > 0 && summary.sugar > nutrientGoals.sugar) Color(0xFFEF5350) else Color(0xFFFFB74D)
+                            MicroItem(
+                                icon = "🍬 Sugar",
+                                value = sugarStr,
+                                progress = sugarProgress,
+                                progressColor = sugarColor,
+                                modifier = Modifier.weight(1f)
+                            ) {
                                 if (summary.sugarBreakdown.isNotEmpty()) showPopupFor = "🍬 Sugar" to summary.sugarBreakdown
                             }
-                            MicroItem("🧂 Salt", String.format(Locale.US, "%.1f g", summary.salt), modifier = Modifier.weight(1f)) {
+
+                            val saltStr = if (nutrientGoals.salt > 0) String.format(Locale.US, "%.1f/%.1fg", summary.salt, nutrientGoals.salt) else String.format(Locale.US, "%.1f g", summary.salt)
+                            val saltProgress = if (nutrientGoals.salt > 0) (summary.salt / nutrientGoals.salt).toFloat() else null
+                            val saltColor = if (nutrientGoals.salt > 0 && summary.salt > nutrientGoals.salt) Color(0xFFEF5350) else Color(0xFF90A4AE)
+                            MicroItem(
+                                icon = "🧂 Salt",
+                                value = saltStr,
+                                progress = saltProgress,
+                                progressColor = saltColor,
+                                modifier = Modifier.weight(1f)
+                            ) {
                                 if (summary.saltBreakdown.isNotEmpty()) showPopupFor = "🧂 Salt" to summary.saltBreakdown
                             }
                         }
@@ -383,8 +492,16 @@ fun DashboardScreen(
                             MicroItem("🍎 Fruit", "${summary.fruitGrams.toInt()} g", modifier = Modifier.weight(1f)) {
                                 if (summary.fruitBreakdown.isNotEmpty()) showPopupFor = "🍎 Fruits" to summary.fruitBreakdown
                             }
+                            val vegFruitTarget = if (nutrientGoals.vegFruit > 0) nutrientGoals.vegFruit else 400.0
                             val totalVegFruit = (summary.vegGrams + summary.fruitGrams).toInt()
-                            MicroItem("🥗 Total", "$totalVegFruit/400g", modifier = Modifier.weight(1f)) {
+                            val vfProgress = (totalVegFruit / vegFruitTarget).toFloat()
+                            MicroItem(
+                                icon = "🥗 Total",
+                                value = "$totalVegFruit/${vegFruitTarget.toInt()}g",
+                                progress = vfProgress,
+                                progressColor = Color(0xFF81C784),
+                                modifier = Modifier.weight(1f)
+                            ) {
                                 if (summary.vegFruitBreakdown.isNotEmpty()) showPopupFor = "🥗 Vegetables & Fruits" to summary.vegFruitBreakdown
                             }
                             MicroItem("💊 Supps", "${summary.supplementCount} pcs", modifier = Modifier.weight(1f)) {
@@ -596,16 +713,84 @@ fun DashboardScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MacroItem(name: String, amount: Double, color: Color, onClick: () -> Unit) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .clickable { onClick() }
-            .padding(horizontal = 10.dp, vertical = 2.dp)
+fun MacroItem(
+    name: String,
+    amount: Double,
+    goal: Double,
+    color: Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val pct = if (goal > 0) (amount / goal * 100).toInt() else null
+    val progress = if (goal > 0) (amount / goal).toFloat().coerceIn(0f, 1f) else 0f
+
+    Card(
+        onClick = onClick,
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
+        shape = RoundedCornerShape(12.dp),
+        modifier = modifier
     ) {
-        Text(name, color = color, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-        Text("${amount.toInt()} g", color = Color.White, fontSize = 14.sp)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp, horizontal = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = name,
+                    color = color,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp
+                )
+                if (pct != null) {
+                    Text(
+                        text = "$pct%",
+                        color = if (pct > 105) Color(0xFFFFB74D) else Color(0xFFB0BEC5),
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 11.sp
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(3.dp))
+
+            Text(
+                text = if (goal > 0) "${amount.toInt()} / ${goal.toInt()} g" else "${amount.toInt()} g",
+                color = Color.White,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Spacer(modifier = Modifier.height(5.dp))
+
+            // Progress bar
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(4.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(Color(0xFF2E2E2E))
+            ) {
+                if (progress > 0f) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(progress)
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(color)
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -614,6 +799,8 @@ fun MacroItem(name: String, amount: Double, color: Color, onClick: () -> Unit) {
 fun MicroItem(
     icon: String,
     value: String,
+    progress: Float? = null,
+    progressColor: Color = Color(0xFF81C784),
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
@@ -626,12 +813,39 @@ fun MicroItem(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 8.dp, horizontal = 2.dp),
+                .padding(vertical = 7.dp, horizontal = 3.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(icon, fontSize = 12.sp, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(icon, fontSize = 11.sp, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Spacer(modifier = Modifier.height(2.dp))
-            Text(value, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                text = value,
+                fontWeight = FontWeight.Bold,
+                fontSize = 12.sp,
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (progress != null) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(0.85f)
+                        .height(3.dp)
+                        .clip(RoundedCornerShape(1.5.dp))
+                        .background(Color(0xFF2E2E2E))
+                ) {
+                    if (progress > 0f) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(progress.coerceIn(0f, 1f))
+                                .height(3.dp)
+                                .clip(RoundedCornerShape(1.5.dp))
+                                .background(progressColor)
+                        )
+                    }
+                }
+            }
         }
     }
 }

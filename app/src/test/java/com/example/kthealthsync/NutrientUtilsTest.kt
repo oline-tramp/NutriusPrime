@@ -278,6 +278,66 @@ class NutrientUtilsTest {
             guid = "w4", guidRecipe = null, isRecipe = false, unit = "20 x 1 ml"
         )
         assertEquals(0.0, NutrientUtils.parseLiquidVolumeMl(watermelonSyrup), 0.01)
+
+        // Magnesia logged in grams (900 x 1 g, water = null) -> 900.0 ml
+        val magnesiaGrams = Foodstuff(
+            title = "Přírodní minerální voda Magnesia neperlivá",
+            name = null, nazev = null, energy = "0", protein = "0", carbohydrate = "0",
+            fat = "0", sugar = "0", salt = "0", water = null, fiber = "0",
+            foodstuff = null, items = null, ingredients = null, components = null,
+            guid = "mag2", guidRecipe = null, isRecipe = false, unit = "900 x 1 g"
+        )
+        assertEquals(900.0, NutrientUtils.parseLiquidVolumeMl(magnesiaGrams), 0.01)
+
+        // Magnesia simple grams (1500 g, water = "0") -> 1500.0 ml
+        val magnesiaSimpleG = Foodstuff(
+            title = "Magnesia Red",
+            name = null, nazev = null, energy = null, protein = null, carbohydrate = null,
+            fat = null, sugar = null, salt = null, water = "0", fiber = null,
+            foodstuff = null, items = null, ingredients = null, components = null,
+            guid = "mag3", guidRecipe = null, isRecipe = false, unit = "1500 g"
+        )
+        assertEquals(1500.0, NutrientUtils.parseLiquidVolumeMl(magnesiaSimpleG), 0.01)
+
+        // Mineral water container in grams: 1 x láhev (1500 g) -> 1500.0 ml
+        val mattoniBottleG = Foodstuff(
+            title = "Mattoni Grand perlivá",
+            name = null, nazev = null, energy = null, protein = null, carbohydrate = null,
+            fat = null, sugar = null, salt = null, water = null, fiber = null,
+            foodstuff = null, items = null, ingredients = null, components = null,
+            guid = "mat1", guidRecipe = null, isRecipe = false, unit = "1 x láhev (1500 g)"
+        )
+        assertEquals(1500.0, NutrientUtils.parseLiquidVolumeMl(mattoniBottleG), 0.01)
+
+        // Fresh cucumber (okurka salátová, 200 g) -> 200 * 0.952 = 190.4 ml
+        val cucumberG = Foodstuff(
+            title = "Okurka salátová",
+            name = null, nazev = null, energy = null, protein = null, carbohydrate = null,
+            fat = null, sugar = null, salt = null, water = null, fiber = null,
+            foodstuff = null, items = null, ingredients = null, components = null,
+            guid = "c1", guidRecipe = null, isRecipe = false, unit = "200 g"
+        )
+        assertEquals(190.4, NutrientUtils.parseLiquidVolumeMl(cucumberG), 0.01)
+
+        // Fresh cucumber Russian (Огурцы свежие, 150 x 1 g) -> 150 * 0.952 = 142.8 ml
+        val cucumberRu = Foodstuff(
+            title = "Огурцы свежие",
+            name = null, nazev = null, energy = null, protein = null, carbohydrate = null,
+            fat = null, sugar = null, salt = null, water = null, fiber = null,
+            foodstuff = null, items = null, ingredients = null, components = null,
+            guid = "c2", guidRecipe = null, isRecipe = false, unit = "150 x 1 g"
+        )
+        assertEquals(142.8, NutrientUtils.parseLiquidVolumeMl(cucumberRu), 0.01)
+
+        // Pickled cucumber (Kyselé okurky) -> excluded from raw hydration (0.0 ml)
+        val pickledCucumber = Foodstuff(
+            title = "Kyselé okurky Znojmia",
+            name = null, nazev = null, energy = null, protein = null, carbohydrate = null,
+            fat = null, sugar = null, salt = null, water = null, fiber = null,
+            foodstuff = null, items = null, ingredients = null, components = null,
+            guid = "c3", guidRecipe = null, isRecipe = false, unit = "100 g"
+        )
+        assertEquals(0.0, NutrientUtils.parseLiquidVolumeMl(pickledCucumber), 0.01)
     }
 
     @Test
