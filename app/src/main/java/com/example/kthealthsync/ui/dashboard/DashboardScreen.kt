@@ -748,7 +748,6 @@ fun DashboardScreen(
                     food = food,
                     initialMealTimeId = mealTimeId,
                     currentDate = selectedDate,
-                    nutrientGoals = nutrientGoals,
                     viewModel = viewModel,
                     onDismiss = {
                         showEditDialog = false

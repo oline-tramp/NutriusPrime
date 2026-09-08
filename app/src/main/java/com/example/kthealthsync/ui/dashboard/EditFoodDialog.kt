@@ -86,7 +86,6 @@ fun EditFoodDialog(
     food: Foodstuff,
     initialMealTimeId: String,
     currentDate: ZonedDateTime,
-    nutrientGoals: NutrientGoals,
     viewModel: DashboardViewModel,
     onDismiss: () -> Unit,
     onSuccess: () -> Unit,
@@ -110,6 +109,7 @@ fun EditFoodDialog(
 
     var isLoadingOptions by remember { mutableStateOf(true) }
     var isSubmitting by remember { mutableStateOf(false) }
+    var showDeleteConfirmation by remember { mutableStateOf(false) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
 
     // Macro density base per 100g
@@ -500,7 +500,7 @@ fun EditFoodDialog(
         dismissButton = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(
-                    onClick = onDelete,
+                    onClick = { showDeleteConfirmation = true },
                     modifier = Modifier.size(36.dp)
                 ) {
                     Icon(
@@ -517,4 +517,31 @@ fun EditFoodDialog(
             }
         }
     )
+
+    if (showDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmation = false },
+            title = { Text("Удалить запись?") },
+            text = {
+                val displayName = food.title ?: food.name ?: food.nazev ?: "продукт"
+                Text("Вы уверены, что хотите удалить «$displayName» из дневника?")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDeleteConfirmation = false
+                        onDelete()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF5350))
+                ) {
+                    Text("Удалить", color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirmation = false }) {
+                    Text("Отмена")
+                }
+            }
+        )
+    }
 }
