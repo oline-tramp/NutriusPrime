@@ -129,6 +129,15 @@ class KalorickeIntegrationTest {
         println("Using cookie starting with: ${cookie.take(20)}...")
         val api = RetrofitClient.instance
         
+        try {
+            api.getDiary("07.09.2026", cookie)
+        } catch (e: retrofit2.HttpException) {
+            if (e.code() == 302 || e.code() == 401) {
+                org.junit.Assume.assumeTrue("Live session expired (HTTP ${e.code()}). Update KALORICKE_COOKIE in local.properties to run live integration test.", false)
+                return@runBlocking
+            }
+        }
+        
         listOf("01.09.2026", "02.09.2026", "03.09.2026", "04.09.2026", "05.09.2026", "06.09.2026", "07.09.2026", "08.09.2026").forEach { testDate ->
             val dResp = api.getDiary(testDate, cookie)
             val allF = dResp.data?.times?.flatMap { it.foodstuff ?: emptyList() } ?: emptyList()

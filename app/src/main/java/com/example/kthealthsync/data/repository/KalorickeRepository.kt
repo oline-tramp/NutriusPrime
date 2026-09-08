@@ -7,6 +7,7 @@ import com.example.kthealthsync.domain.util.NutrientUtils
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
@@ -299,38 +300,41 @@ class KalorickeRepository(
 
     suspend fun getFrequentFoodstuff(page: Int = 0, limit: Int = 10): List<AutocompleteResponseItem> {
         val cookie = getCookie()
-        return if (cookie.isNotEmpty()) {
-            try {
-                api.getFrequentFoodstuff(page = page, limit = limit, cookie = cookie).filter { it.id != null }
-            } catch (e: Exception) {
-                DebugLogger.addActionLog("Get frequent foodstuff page $page failed: ${e.message}")
-                emptyList()
+        if (cookie.isEmpty()) return emptyList()
+        return try {
+            executeWithRetry(operationName = "getFrequentFoodstuff") { cookieParam ->
+                api.getFrequentFoodstuff(page = page, limit = limit, cookie = cookieParam).filter { it.id != null }
             }
-        } else emptyList()
+        } catch (e: Exception) {
+            DebugLogger.addActionLog("Get frequent foodstuff page $page failed: ${e.message}")
+            emptyList()
+        }
     }
 
     suspend fun getFavoriteFoodstuff(page: Int = 0, limit: Int = 10): List<AutocompleteResponseItem> {
         val cookie = getCookie()
-        return if (cookie.isNotEmpty()) {
-            try {
-                api.getFavoriteFoodstuff(page = page, limit = limit, cookie = cookie).filter { it.id != null }
-            } catch (e: Exception) {
-                DebugLogger.addActionLog("Get favorite foodstuff page $page failed: ${e.message}")
-                emptyList()
+        if (cookie.isEmpty()) return emptyList()
+        return try {
+            executeWithRetry(operationName = "getFavoriteFoodstuff") { cookieParam ->
+                api.getFavoriteFoodstuff(page = page, limit = limit, cookie = cookieParam).filter { it.id != null }
             }
-        } else emptyList()
+        } catch (e: Exception) {
+            DebugLogger.addActionLog("Get favorite foodstuff page $page failed: ${e.message}")
+            emptyList()
+        }
     }
 
     suspend fun getMyMeals(page: Int = 0, limit: Int = 50): List<AutocompleteResponseItem> {
         val cookie = getCookie()
-        return if (cookie.isNotEmpty()) {
-            try {
-                api.getMyMeals(page = page, limit = limit, cookie = cookie).filter { it.id != null }
-            } catch (e: Exception) {
-                DebugLogger.addActionLog("Get my meals page $page failed: ${e.message}")
-                emptyList()
+        if (cookie.isEmpty()) return emptyList()
+        return try {
+            executeWithRetry(operationName = "getMyMeals") { cookieParam ->
+                api.getMyMeals(page = page, limit = limit, cookie = cookieParam).filter { it.id != null }
             }
-        } else emptyList()
+        } catch (e: Exception) {
+            DebugLogger.addActionLog("Get my meals page $page failed: ${e.message}")
+            emptyList()
+        }
     }
 
     suspend fun searchFood(
@@ -342,7 +346,9 @@ class KalorickeRepository(
         if (cookie.isEmpty()) return emptyList()
 
         val serverResults = try {
-            api.searchFood(query = query, page = page, cookie = cookie).filter { it.id != null }
+            executeWithRetry(operationName = "searchFood") { cookieParam ->
+                api.searchFood(query = query, page = page, cookie = cookieParam).filter { it.id != null }
+            }
         } catch (e: Exception) {
             DebugLogger.addActionLog("Search food page $page failed: ${e.message}")
             emptyList()
@@ -358,18 +364,20 @@ class KalorickeRepository(
     }
 
     suspend fun getFoodForm(guid: String): FoodFormResponse {
-        val cookie = getCookie()
-        return api.getFoodForm(guid, cookie)
+        return executeWithRetry(operationName = "getFoodForm") { cookieParam ->
+            api.getFoodForm(guid, cookieParam)
+        }
     }
 
     suspend fun getFoodMacrosFromWeb(itemUrl: String, formUrl: String?): Map<String, Double> {
         macroCache[itemUrl]?.let { return it }
 
-        val cookie = getCookie()
         return try {
             val fullUrl = formUrl ?: if (itemUrl.contains("/")) itemUrl else "potraviny/$itemUrl"
             val htmlUrl = "https://www.kaloricketabulky.cz/$fullUrl"
-            val htmlResp = api.getFoodHtml(htmlUrl, cookie).string()
+            val htmlResp = executeWithRetry(operationName = "getFoodMacrosFromWeb") { cookieParam ->
+                api.getFoodHtml(htmlUrl, cookieParam).string()
+            }
             val parsed = NutrientUtils.parseLdJsonMacros(htmlResp)
             if (parsed.isNotEmpty()) {
                 macroCache[itemUrl] = parsed
@@ -382,8 +390,9 @@ class KalorickeRepository(
     }
 
     suspend fun addFoodstuff(request: AddFoodRequest): AddFoodResponse {
-        val cookie = getCookie()
-        return api.addFoodstuff(request, cookie)
+        return executeWithRetry(operationName = "addFoodstuff") { cookieParam ->
+            api.addFoodstuff(request, cookieParam)
+        }
     }
 
     /**
@@ -400,7 +409,9 @@ class KalorickeRepository(
         val cookie = getCookie()
         if (cookie.isBlank()) return null
         return try {
-            val resp = api.getUserProfileForm(cookie)
+            val resp = executeWithRetry(operationName = "fetchNutrientGoalsFromApi") { cookieParam ->
+                api.getUserProfileForm(cookieParam)
+            }
             val data = resp.data ?: return null
 
             lastGoalsFetchTime = now
@@ -453,14 +464,14 @@ class KalorickeRepository(
     }
 
     suspend fun deleteDiaryEntries(ids: Collection<String>): Result<Unit> {
-        val cookie = getCookie()
-        if (cookie.isBlank()) return Result.failure(IllegalStateException("No cookie available"))
         val validIds = ids.filter { it.isNotBlank() }
         if (validIds.isEmpty()) return Result.success(Unit)
 
         return try {
             val joined = validIds.joinToString(",")
-            val resp = api.deleteFoodstuffDiary(joined, cookie)
+            val resp = executeWithRetry(operationName = "deleteFoodstuffDiary") { cookieParam ->
+                api.deleteFoodstuffDiary(joined, cookieParam)
+            }
             DebugLogger.addActionLog("Deleted ${validIds.size} diary entries: $joined (code=${resp.code}, msg=${resp.message})")
             Result.success(Unit)
         } catch (e: Exception) {
@@ -474,8 +485,6 @@ class KalorickeRepository(
         targetTimeId: String,
         targetDate: String? = null
     ): Result<Unit> {
-        val cookie = getCookie()
-        if (cookie.isBlank()) return Result.failure(IllegalStateException("No cookie available"))
         val validIds = ids.filter { it.isNotBlank() }
         if (validIds.isEmpty()) return Result.success(Unit)
 
@@ -483,7 +492,9 @@ class KalorickeRepository(
 
         return try {
             for (id in validIds) {
-                val resp = api.moveFoodstuffDiary(id, targetTimeId, dateParam, cookie)
+                val resp = executeWithRetry(operationName = "moveFoodstuffDiary") { cookieParam ->
+                    api.moveFoodstuffDiary(id, targetTimeId, dateParam, cookieParam)
+                }
                 DebugLogger.addActionLog("Moved diary entry $id to time=$targetTimeId, date=$dateParam (code=${resp.code})")
             }
             Result.success(Unit)
@@ -491,5 +502,67 @@ class KalorickeRepository(
             DebugLogger.addActionLog("Failed to move diary entries: ${e.message}")
             Result.failure(e)
         }
+    }
+
+    /**
+     * Executes a network operation against Kalorické Tabulky with automatic retry
+     * and auto-relogin on session expiration (HTTP 302 / 401).
+     *
+     * Kalorické Tabulky redirects to login page (HTTP 302) when a session expires
+     * or when concurrent diary modifications cause temporary redirects.
+     */
+    suspend fun <T> executeWithRetry(
+        maxRetries: Int = 3,
+        operationName: String = "operation",
+        block: suspend (cookie: String) -> T
+    ): T {
+        var lastException: Exception? = null
+        var currentCookie = getCookie()
+
+        for (attempt in 1..maxRetries) {
+            try {
+                return block(currentCookie)
+            } catch (e: Exception) {
+                lastException = e
+                val code = (e as? retrofit2.HttpException)?.code()
+                val errorMsg = e.message ?: ""
+                val isAuthError = code == 302 || code == 401 || errorMsg.contains("302") || errorMsg.contains("401")
+
+                DebugLogger.addActionLog("[$operationName] Attempt $attempt/$maxRetries failed (code=$code): $errorMsg")
+
+                if (isAuthError) {
+                    val email = prefs.emailFlow.first()
+                    val passHash = prefs.passwordHashFlow.first()
+                    if (email.isNotEmpty() && passHash.isNotEmpty()) {
+                        DebugLogger.addActionLog("[$operationName] 302/401 received. Attempting auto-login...")
+                        try {
+                            val loginResp = api.login(LoginRequest(email, passHash))
+                            if (loginResp.isSuccessful && loginResp.body()?.code == 0) {
+                                val jsessionCookie = loginResp.headers().values("Set-Cookie").firstOrNull { it.contains("JSESSIONID") }
+                                if (jsessionCookie != null) {
+                                    val newCookie = jsessionCookie.substringBefore(";")
+                                    prefs.saveCookie(newCookie)
+                                    currentCookie = newCookie
+                                    DebugLogger.addActionLog("[$operationName] Auto-login successful, retrying immediately...")
+                                    continue
+                                }
+                            } else {
+                                DebugLogger.addActionLog("[$operationName] Auto-login failed: HTTP ${loginResp.code()}")
+                            }
+                        } catch (loginEx: Exception) {
+                            DebugLogger.addActionLog("[$operationName] Auto-login request error: ${loginEx.message}")
+                        }
+                    } else {
+                        DebugLogger.addActionLog("[$operationName] 302/401 received but no credentials saved for auto-login.")
+                    }
+                }
+
+                if (attempt < maxRetries) {
+                    val delayMs = attempt * 350L
+                    delay(delayMs)
+                }
+            }
+        }
+        throw lastException ?: IllegalStateException("Operation $operationName failed after $maxRetries attempts")
     }
 }

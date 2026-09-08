@@ -287,49 +287,57 @@ interface KalorickeApiService {
 
 suspend fun KalorickeApiService.getDiaryWithAutoLogin(
     date: String,
-    prefs: PreferencesManager
+    prefs: PreferencesManager,
+    maxRetries: Int = 3
 ): DiaryResponse {
     var cookie = prefs.cookieFlow.first()
     if (cookie.isBlank()) throw Exception("No cookie available")
     
-    try {
-        return getDiary(date, cookie)
-    } catch (e: Exception) {
-        val code = (e as? retrofit2.HttpException)?.code()
-        val errorMsg = e.message ?: ""
-        val isAuthError = code == 302 || code == 401 || errorMsg.contains("302") || errorMsg.contains("401")
-        
-        if (isAuthError) {
-            val email = prefs.emailFlow.first()
-            val passHash = prefs.passwordHashFlow.first()
-            DebugLogger.addActionLog("Session expired (302/401). Saved creds: email=${email.isNotEmpty()}, hash=${passHash.isNotEmpty()}")
+    var lastEx: Exception? = null
+    for (attempt in 1..maxRetries) {
+        try {
+            return getDiary(date, cookie)
+        } catch (e: Exception) {
+            lastEx = e
+            val code = (e as? retrofit2.HttpException)?.code()
+            val errorMsg = e.message ?: ""
+            val isAuthError = code == 302 || code == 401 || errorMsg.contains("302") || errorMsg.contains("401")
             
-            if (email.isNotEmpty() && passHash.isNotEmpty()) {
-                DebugLogger.addActionLog("Attempting auto-login...")
-                try {
-                    val loginResp = login(LoginRequest(email, passHash))
-                    if (loginResp.isSuccessful && loginResp.body()?.code == 0) {
-                        val jsessionCookie = loginResp.headers().values("Set-Cookie").firstOrNull { it.contains("JSESSIONID") }
-                        if (jsessionCookie != null) {
-                            cookie = jsessionCookie.substringBefore(";")
-                            prefs.saveCookie(cookie)
-                            DebugLogger.addActionLog("Auto-login successful, retrying fetch...")
-                            return getDiary(date, cookie)
+            if (isAuthError) {
+                val email = prefs.emailFlow.first()
+                val passHash = prefs.passwordHashFlow.first()
+                DebugLogger.addActionLog("Session expired (302/401). Saved creds: email=${email.isNotEmpty()}, hash=${passHash.isNotEmpty()}")
+                
+                if (email.isNotEmpty() && passHash.isNotEmpty()) {
+                    DebugLogger.addActionLog("Attempting auto-login...")
+                    try {
+                        val loginResp = login(LoginRequest(email, passHash))
+                        if (loginResp.isSuccessful && loginResp.body()?.code == 0) {
+                            val jsessionCookie = loginResp.headers().values("Set-Cookie").firstOrNull { it.contains("JSESSIONID") }
+                            if (jsessionCookie != null) {
+                                cookie = jsessionCookie.substringBefore(";")
+                                prefs.saveCookie(cookie)
+                                DebugLogger.addActionLog("Auto-login successful, retrying fetch...")
+                                continue
+                            }
+                        } else {
+                            DebugLogger.addActionLog("Auto-login failed. Server returned code ${loginResp.code()}")
                         }
-                    } else {
-                        DebugLogger.addActionLog("Auto-login failed. Server returned code ${loginResp.code()}")
+                    } catch (loginEx: Exception) {
+                        DebugLogger.addActionLog("Auto-login request failed: ${loginEx.message}")
                     }
-                } catch (loginEx: Exception) {
-                    DebugLogger.addActionLog("Auto-login request failed: ${loginEx.message}")
+                } else {
+                    DebugLogger.addActionLog("Cannot auto-login: No credentials saved.")
                 }
             } else {
-                DebugLogger.addActionLog("Cannot auto-login: No credentials saved.")
+                DebugLogger.addActionLog("Fetch error (not 302): $errorMsg")
             }
-        } else {
-            DebugLogger.addActionLog("Fetch error (not 302): $errorMsg")
+            if (attempt < maxRetries) {
+                kotlinx.coroutines.delay(attempt * 350L)
+            }
         }
-        throw e
     }
+    throw lastEx ?: Exception("Failed to fetch diary after $maxRetries attempts")
 }
 
 object RetrofitClient {
