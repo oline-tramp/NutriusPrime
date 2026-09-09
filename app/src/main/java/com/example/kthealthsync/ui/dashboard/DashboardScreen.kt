@@ -1259,38 +1259,32 @@ fun DailyDiarySpoiler(
                     // Barcode Scanner button
                     IconButton(
                         onClick = { onScanBarcodeClick(null) },
-                        modifier = Modifier
-                            .size(34.dp)
-                            .background(Color(0xFF262626), RoundedCornerShape(8.dp))
-                            .border(1.dp, Color(0xFF383838), RoundedCornerShape(8.dp))
+                        modifier = Modifier.size(32.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.QrCodeScanner,
                             contentDescription = strings.scanBarcode,
                             tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(19.dp)
                         )
                     }
 
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(2.dp))
 
                     // Add button on the spoiler header (compact icon button)
                     IconButton(
                         onClick = { onAddFoodClick(null) },
-                        modifier = Modifier
-                            .size(34.dp)
-                            .background(Color(0xFF262626), RoundedCornerShape(8.dp))
-                            .border(1.dp, Color(0xFF383838), RoundedCornerShape(8.dp))
+                        modifier = Modifier.size(32.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Add,
                             contentDescription = strings.add,
                             tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(20.dp)
                         )
                     }
 
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(2.dp))
 
                     IconButton(
                         onClick = { isDiaryExpanded = !isDiaryExpanded },
@@ -1587,36 +1581,32 @@ fun MealTimeGroup(
                 // Per-meal Scanner Button
                 IconButton(
                     onClick = onScanBarcodeClick,
-                    modifier = Modifier
-                        .size(30.dp)
-                        .background(Color(0xFF222222), RoundedCornerShape(6.dp))
+                    modifier = Modifier.size(30.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.QrCodeScanner,
                         contentDescription = "${strings.scanBarcode} $mealDisplayName",
-                        tint = Color(0xFFCCCCCC),
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(4.dp))
-
-                // Per-meal Add Button
-                IconButton(
-                    onClick = onAddFoodClick,
-                    modifier = Modifier
-                        .size(30.dp)
-                        .background(Color(0xFF222222), RoundedCornerShape(6.dp))
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = "${strings.add} $mealDisplayName",
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(17.dp)
                     )
                 }
 
-                Spacer(modifier = Modifier.width(4.dp))
+                Spacer(modifier = Modifier.width(2.dp))
+
+                // Per-meal Add Button
+                IconButton(
+                    onClick = onAddFoodClick,
+                    modifier = Modifier.size(30.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "${strings.add} $mealDisplayName",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(2.dp))
 
                 // Chevron
                 IconButton(
