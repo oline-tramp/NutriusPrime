@@ -237,6 +237,10 @@ fun NutrientGoalsDialog(
     var fiber by remember { mutableStateOf(currentGoals.fiber.toInt().toString()) }
     var sugar by remember { mutableStateOf(currentGoals.sugar.toInt().toString()) }
     var salt by remember { mutableStateOf(currentGoals.salt.toString()) }
+    var water by remember {
+        val w = if (currentGoals.water > 50) currentGoals.water / 1000.0 else currentGoals.water
+        mutableStateOf(if (w > 0) String.format(Locale.US, "%.1f", w) else "")
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -253,11 +257,14 @@ fun NutrientGoalsDialog(
                 OutlinedTextField(value = fiber, onValueChange = { fiber = it }, label = { Text("Fiber (g)") }, singleLine = true)
                 OutlinedTextField(value = sugar, onValueChange = { sugar = it }, label = { Text("Sugar (g)") }, singleLine = true)
                 OutlinedTextField(value = salt, onValueChange = { salt = it }, label = { Text("Salt (g)") }, singleLine = true)
+                OutlinedTextField(value = water, onValueChange = { water = it }, label = { Text("Water (L)") }, singleLine = true)
             }
         },
         confirmButton = {
             val strings = LocalAppStrings.current
             Button(onClick = {
+                val waterLiters = water.replace(",", ".").toDoubleOrNull() ?: 0.0
+                val waterMl = if (waterLiters > 0 && waterLiters < 50) waterLiters * 1000.0 else waterLiters
                 val updated = NutrientGoals(
                     kcal = kcal.toDoubleOrNull() ?: currentGoals.kcal,
                     protein = protein.toDoubleOrNull() ?: currentGoals.protein,
@@ -265,7 +272,8 @@ fun NutrientGoalsDialog(
                     fat = fat.toDoubleOrNull() ?: currentGoals.fat,
                     fiber = fiber.toDoubleOrNull() ?: currentGoals.fiber,
                     sugar = sugar.toDoubleOrNull() ?: currentGoals.sugar,
-                    salt = salt.toDoubleOrNull() ?: currentGoals.salt
+                    salt = salt.toDoubleOrNull() ?: currentGoals.salt,
+                    water = if (waterMl > 0) waterMl else currentGoals.water
                 )
                 onSave(updated)
             }) {

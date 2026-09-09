@@ -279,20 +279,26 @@ fun DashboardScreen(
                     .padding(horizontal = 16.dp, vertical = 4.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Row(
+                Surface(
+                    color = Color(0xFF1E1E1E),
+                    shape = RoundedCornerShape(20.dp),
+                    border = BorderStroke(1.dp, Color(0xFF2E2E2E)),
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.End
+                        .align(Alignment.End)
+                        .padding(bottom = 6.dp)
                 ) {
-                    Text(strings.withMeals, fontSize = 12.sp, color = Color.Gray)
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Switch(
-                        checked = withMeals,
-                        onCheckedChange = { viewModel.toggleWithMeals(it) },
-                        modifier = Modifier.scale(0.75f)
-                    )
+                    Row(
+                        modifier = Modifier.padding(start = 10.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(strings.withMeals, fontSize = 12.sp, color = Color(0xFFBBBBBB))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Switch(
+                            checked = withMeals,
+                            onCheckedChange = { viewModel.toggleWithMeals(it) },
+                            modifier = Modifier.scale(0.75f)
+                        )
+                    }
                 }
 
                 when (val state = uiState) {
@@ -441,9 +447,10 @@ fun DashboardScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             val waterLiters = summary.water / 1000.0
-                            val waterGoalLiters = nutrientGoals.water / 1000.0
-                            val waterStr = if (waterGoalLiters > 0) String.format(Locale.US, "%.1f/%.1fL", waterLiters, waterGoalLiters) else String.format(Locale.US, "%.1f L", waterLiters)
-                            val waterProgress = if (nutrientGoals.water > 0) (summary.water / nutrientGoals.water).toFloat() else null
+                            val rawWaterGoal = nutrientGoals.water
+                            val waterGoalLiters = if (rawWaterGoal >= 50.0) rawWaterGoal / 1000.0 else rawWaterGoal
+                            val waterStr = if (waterGoalLiters >= 0.5) String.format(Locale.US, "%.1f / %.1f L", waterLiters, waterGoalLiters) else String.format(Locale.US, "%.1f L", waterLiters)
+                            val waterProgress = if (waterGoalLiters > 0.0) (waterLiters / waterGoalLiters).toFloat() else null
                             MicroItem(
                                 icon = strings.water,
                                 value = waterStr,
@@ -454,7 +461,7 @@ fun DashboardScreen(
                                 if (summary.waterBreakdown.isNotEmpty()) showPopupFor = strings.water to summary.waterBreakdown
                             }
 
-                            val fiberStr = if (nutrientGoals.fiber > 0) "${summary.fiber.toInt()}/${nutrientGoals.fiber.toInt()}g" else "${summary.fiber.toInt()} g"
+                            val fiberStr = if (nutrientGoals.fiber > 0) "${summary.fiber.toInt()} / ${nutrientGoals.fiber.toInt()} g" else "${summary.fiber.toInt()} g"
                             val fiberProgress = if (nutrientGoals.fiber > 0) (summary.fiber / nutrientGoals.fiber).toFloat() else null
                             MicroItem(
                                 icon = strings.fiber,
@@ -466,7 +473,7 @@ fun DashboardScreen(
                                 if (summary.fiberBreakdown.isNotEmpty()) showPopupFor = strings.fiber to summary.fiberBreakdown
                             }
 
-                            val sugarStr = if (nutrientGoals.sugar > 0) "${summary.sugar.toInt()}/${nutrientGoals.sugar.toInt()}g" else "${summary.sugar.toInt()} g"
+                            val sugarStr = if (nutrientGoals.sugar > 0) "${summary.sugar.toInt()} / ${nutrientGoals.sugar.toInt()} g" else "${summary.sugar.toInt()} g"
                             val sugarProgress = if (nutrientGoals.sugar > 0) (summary.sugar / nutrientGoals.sugar).toFloat() else null
                             val sugarColor = if (nutrientGoals.sugar > 0 && summary.sugar > nutrientGoals.sugar) Color(0xFFEF5350) else Color(0xFFFFB74D)
                             MicroItem(
@@ -479,7 +486,7 @@ fun DashboardScreen(
                                 if (summary.sugarBreakdown.isNotEmpty()) showPopupFor = strings.sugar to summary.sugarBreakdown
                             }
 
-                            val saltStr = if (nutrientGoals.salt > 0) String.format(Locale.US, "%.1f/%.1fg", summary.salt, nutrientGoals.salt) else String.format(Locale.US, "%.1f g", summary.salt)
+                            val saltStr = if (nutrientGoals.salt > 0) String.format(Locale.US, "%.1f / %.1f g", summary.salt, nutrientGoals.salt) else String.format(Locale.US, "%.1f g", summary.salt)
                             val saltProgress = if (nutrientGoals.salt > 0) (summary.salt / nutrientGoals.salt).toFloat() else null
                             val saltColor = if (nutrientGoals.salt > 0 && summary.salt > nutrientGoals.salt) Color(0xFFEF5350) else Color(0xFF90A4AE)
                             MicroItem(
@@ -511,7 +518,7 @@ fun DashboardScreen(
                             val vfProgress = (totalVegFruit / vegFruitTarget).toFloat()
                             MicroItem(
                                 icon = strings.vegFruitTotal,
-                                value = "$totalVegFruit/${vegFruitTarget.toInt()}g",
+                                value = "$totalVegFruit / ${vegFruitTarget.toInt()} g",
                                 progress = vfProgress,
                                 progressColor = Color(0xFF81C784),
                                 modifier = Modifier.weight(1f)
@@ -888,9 +895,13 @@ fun MacroItem(
                     text = name,
                     color = color,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp
+                    fontSize = 12.sp,
+                    modifier = Modifier.weight(1f, fill = false),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 if (pct != null) {
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = "$pct%",
                         color = if (pct > 105) Color(0xFFFFB74D) else Color(0xFFB0BEC5),
@@ -962,7 +973,7 @@ fun MicroItem(
             Text(
                 text = value,
                 fontWeight = FontWeight.Bold,
-                fontSize = 12.sp,
+                fontSize = 11.5.sp,
                 color = Color.White,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -1250,7 +1261,8 @@ fun DailyDiarySpoiler(
                         onClick = { onScanBarcodeClick(null) },
                         modifier = Modifier
                             .size(34.dp)
-                            .background(Color(0xFF2A2A2A), RoundedCornerShape(8.dp))
+                            .background(Color(0xFF262626), RoundedCornerShape(8.dp))
+                            .border(1.dp, Color(0xFF383838), RoundedCornerShape(8.dp))
                     ) {
                         Icon(
                             imageVector = Icons.Default.QrCodeScanner,
@@ -1267,12 +1279,13 @@ fun DailyDiarySpoiler(
                         onClick = { onAddFoodClick(null) },
                         modifier = Modifier
                             .size(34.dp)
-                            .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
+                            .background(Color(0xFF262626), RoundedCornerShape(8.dp))
+                            .border(1.dp, Color(0xFF383838), RoundedCornerShape(8.dp))
                     ) {
                         Icon(
                             imageVector = Icons.Default.Add,
                             contentDescription = strings.add,
-                            tint = Color.Black,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -1574,28 +1587,32 @@ fun MealTimeGroup(
                 // Per-meal Scanner Button
                 IconButton(
                     onClick = onScanBarcodeClick,
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier
+                        .size(30.dp)
+                        .background(Color(0xFF222222), RoundedCornerShape(6.dp))
                 ) {
                     Icon(
                         imageVector = Icons.Default.QrCodeScanner,
                         contentDescription = "${strings.scanBarcode} $mealDisplayName",
-                        tint = Color(0xFFAAAAAA),
-                        modifier = Modifier.size(17.dp)
+                        tint = Color(0xFFCCCCCC),
+                        modifier = Modifier.size(16.dp)
                     )
                 }
 
-                Spacer(modifier = Modifier.width(2.dp))
+                Spacer(modifier = Modifier.width(4.dp))
 
                 // Per-meal Add Button
                 IconButton(
                     onClick = onAddFoodClick,
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier
+                        .size(30.dp)
+                        .background(Color(0xFF222222), RoundedCornerShape(6.dp))
                 ) {
                     Icon(
                         imageVector = Icons.Default.Add,
                         contentDescription = "${strings.add} $mealDisplayName",
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(17.dp)
                     )
                 }
 
@@ -1893,6 +1910,7 @@ fun FoodEntryRow(
         // Action Buttons: Drag handle (sandwich), Clone button, Delete button
         Row(verticalAlignment = Alignment.CenterVertically) {
             // Drag Handle / Move Button
+            val barColor = if (isBeingDragged) MaterialTheme.colorScheme.primary else Color(0xFF888888)
             Box(
                 modifier = Modifier
                     .size(30.dp)
@@ -1928,7 +1946,6 @@ fun FoodEntryRow(
                     val barHeight = 2.dp.toPx()
                     val barSpacing = 3.dp.toPx()
                     val corner = CornerRadius(barHeight / 2f, barHeight / 2f)
-                    val barColor = if (isBeingDragged) Color(0xFF64B5F6) else Color(0xFF90CAF9)
                     for (i in 0..2) {
                         val y = i * (barHeight + barSpacing)
                         drawRoundRect(
@@ -1951,7 +1968,7 @@ fun FoodEntryRow(
                 Icon(
                     imageVector = Icons.Default.ContentCopy,
                     contentDescription = strings.cloneAction,
-                    tint = Color(0xFF81C784),
+                    tint = Color(0xFF888888),
                     modifier = Modifier.size(15.dp)
                 )
             }
@@ -1966,7 +1983,7 @@ fun FoodEntryRow(
                 Icon(
                     imageVector = Icons.Default.Delete,
                     contentDescription = strings.deleteAction,
-                    tint = Color(0xFFEF5350),
+                    tint = Color(0xFF888888),
                     modifier = Modifier.size(15.dp)
                 )
             }

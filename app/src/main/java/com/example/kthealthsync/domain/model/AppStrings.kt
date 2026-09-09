@@ -451,7 +451,7 @@ val EnStrings = AppStrings(
     nutritionImpactTitle = "Daily intake impact",
     energy = "Energy",
     protein = "Protein",
-    carbs = "Carbohydrates",
+    carbs = "Carbs",
     fat = "Fat",
 
     settingsTitle = "Settings",

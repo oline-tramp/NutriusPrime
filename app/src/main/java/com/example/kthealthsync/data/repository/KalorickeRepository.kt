@@ -452,7 +452,12 @@ class KalorickeRepository(
                 sugar = sugar,
                 salt = salt,
                 vegFruit = currentGoals.vegFruit,
-                water = data.drinkRegime ?: currentGoals.water
+                water = when {
+                    data.drinkRegime != null && data.drinkRegime > 0 -> {
+                        if (data.drinkRegime < 50.0) data.drinkRegime * 1000.0 else data.drinkRegime
+                    }
+                    else -> currentGoals.water
+                }
             )
             prefs.saveNutrientGoals(goals)
             DebugLogger.addActionLog("Fetched target goals from Kalorické Tabulky API: ${goals.kcal.toInt()} kcal, P:${goals.protein.toInt()}g, C:${goals.carbs.toInt()}g, F:${goals.fat.toInt()}g")

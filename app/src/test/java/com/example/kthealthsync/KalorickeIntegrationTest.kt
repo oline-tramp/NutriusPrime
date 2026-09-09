@@ -213,7 +213,8 @@ class KalorickeIntegrationTest {
     }
 
     @Test
-    fun testBarcodeSearch() = runBlocking {
+    fun testBarcodeSearch() {
+        runBlocking {
         val api = RetrofitClient.instance
         val testBarcodes = listOf(
             "8000500179864", // Nutella
@@ -252,6 +253,26 @@ class KalorickeIntegrationTest {
                 }
             } catch (e: Exception) {
                 println("Barcode $barcode search error: ${e.message}")
+            }
+        }
+    }
+}
+
+    @Test
+    fun testFetchUserProfileForm() {
+        runBlocking {
+            val api = RetrofitClient.instance
+            try {
+                val resp = api.getUserProfileForm(cookie)
+                println("UserProfileForm code=${resp.code}, msg=${resp.message}")
+                val data = resp.data
+                println("ownTargetEnergy=${data?.ownTargetEnergy}, computed=${data?.computedTargetEnergy}, drinkRegime=${data?.drinkRegime}")
+                println("ownNutrients:")
+                data?.ownNutrients?.forEach {
+                    println("  -> code=${it.code}, title=${it.title}, value=${it.value}, computed=${it.computedValue}")
+                }
+            } catch (e: Exception) {
+                println("UserProfileForm error: ${e.message}")
             }
         }
     }
