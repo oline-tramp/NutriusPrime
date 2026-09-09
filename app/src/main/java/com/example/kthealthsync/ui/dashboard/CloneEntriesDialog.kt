@@ -16,6 +16,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.kthealthsync.domain.model.LocalAppStrings
 import com.example.kthealthsync.domain.util.NutrientUtils
 import java.time.LocalDate
 import java.time.ZonedDateTime
@@ -29,10 +30,11 @@ fun CloneEntriesDialog(
     onDismiss: () -> Unit,
     onConfirm: (targetTimeId: String, targetDateStr: String?) -> Unit
 ) {
+    val strings = LocalAppStrings.current
     val context = LocalContext.current
     var selectedMealTimeId by remember { mutableStateOf("1") }
     var mealExpanded by remember { mutableStateOf(false) }
-    val mealOptions = remember { NutrientUtils.STANDARD_MEAL_OPTIONS }
+    val mealOptions = remember(strings) { NutrientUtils.getStandardMealOptions(strings) }
     var targetDate by remember { mutableStateOf(currentDate.toLocalDate()) }
     val formatter = remember { DateTimeFormatter.ofPattern("dd.MM.yyyy") }
 
@@ -40,7 +42,7 @@ fun CloneEntriesDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = "📋 Клонирование ${if (count == 1) "записи" else "$count записей"}",
+                text = if (count == 1) strings.cloneTitle else String.format(strings.cloneMultiTitle, count),
                 fontWeight = FontWeight.Bold,
                 fontSize = 18.sp
             )
@@ -48,7 +50,7 @@ fun CloneEntriesDialog(
         text = {
             Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
                 Text(
-                    text = "Куда клонировать:",
+                    text = strings.whereToClone,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = Color.White
@@ -58,7 +60,7 @@ fun CloneEntriesDialog(
 
                 // Date selection chips
                 Text(
-                    text = "Дата: ${targetDate.format(formatter)}",
+                    text = "${strings.dateToday.substringBefore(" ")}: ${targetDate.format(formatter)}",
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Medium
@@ -71,17 +73,17 @@ fun CloneEntriesDialog(
                     FilterChip(
                         selected = targetDate == currentDate.toLocalDate(),
                         onClick = { targetDate = currentDate.toLocalDate() },
-                        label = { Text("Этот день", fontSize = 11.sp) }
+                        label = { Text(strings.dateThisDay, fontSize = 11.sp) }
                     )
                     FilterChip(
                         selected = targetDate == LocalDate.now(),
                         onClick = { targetDate = LocalDate.now() },
-                        label = { Text("Сегодня", fontSize = 11.sp) }
+                        label = { Text(strings.dateToday, fontSize = 11.sp) }
                     )
                     FilterChip(
                         selected = targetDate == LocalDate.now().plusDays(1),
                         onClick = { targetDate = LocalDate.now().plusDays(1) },
-                        label = { Text("Завтра", fontSize = 11.sp) }
+                        label = { Text(strings.dateTomorrow, fontSize = 11.sp) }
                     )
                 }
 
@@ -102,7 +104,7 @@ fun CloneEntriesDialog(
                 ) {
                     Icon(Icons.Default.DateRange, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Выбрать другую дату...", fontSize = 12.sp)
+                    Text(strings.chooseAnotherDate, fontSize = 12.sp)
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -116,10 +118,10 @@ fun CloneEntriesDialog(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     OutlinedTextField(
-                        value = mealOptions.find { it.first == selectedMealTimeId }?.second ?: "Выберите приём",
+                        value = mealOptions.find { it.first == selectedMealTimeId }?.second ?: strings.chooseMeal,
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Приём пищи", fontSize = 12.sp) },
+                        label = { Text(strings.mealTimeLabel, fontSize = 12.sp) },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = mealExpanded) },
                         modifier = Modifier.fillMaxWidth().menuAnchor(),
                         colors = OutlinedTextFieldDefaults.colors(
@@ -154,12 +156,12 @@ fun CloneEntriesDialog(
                     contentColor = Color.White
                 )
             ) {
-                Text("Клонировать", fontWeight = FontWeight.Bold)
+                Text(strings.clone, fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Отмена")
+                Text(strings.cancel)
             }
         }
     )

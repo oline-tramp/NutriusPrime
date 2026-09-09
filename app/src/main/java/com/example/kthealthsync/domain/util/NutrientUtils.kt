@@ -3,6 +3,8 @@ package com.example.kthealthsync.domain.util
 import com.example.kthealthsync.DiaryResponse
 import com.example.kthealthsync.Foodstuff
 import com.example.kthealthsync.MealTime
+import com.example.kthealthsync.domain.model.AppLanguage
+import com.example.kthealthsync.domain.model.AppStrings
 import com.example.kthealthsync.domain.model.DailySummary
 import com.example.kthealthsync.domain.model.FoodBreakdown
 import com.example.kthealthsync.domain.model.FoodCategory
@@ -904,24 +906,40 @@ object NutrientUtils {
         return options[targetIndex].first
     }
 
+    fun getStandardMealOptions(strings: AppStrings): List<Pair<String, String>> {
+        return listOf(
+            "1" to strings.breakfast,
+            "2" to strings.morningSnack,
+            "3" to strings.lunch,
+            "4" to strings.afternoonSnack,
+            "5" to strings.dinner,
+            "6" to strings.secondDinner
+        )
+    }
+
     val STANDARD_MEAL_OPTIONS = listOf(
-        "1" to "Завтрак (Snídaně)",
-        "2" to "Второй завтрак (Dopolední svačina)",
-        "3" to "Обед (Oběd)",
-        "4" to "Полдник (Odpolední svačina)",
-        "5" to "Ужин (Večeře)",
-        "6" to "Второй ужин (Druhá večeře)"
+        "1" to "Завтрак",
+        "2" to "Второй завтрак",
+        "3" to "Обед",
+        "4" to "Полдник",
+        "5" to "Ужин",
+        "6" to "Второй ужин"
     )
 
-    fun getMealTimeDisplayName(mealTime: MealTime): String {
+    fun getMealTimeDisplayName(mealTime: MealTime, strings: AppStrings? = null): String {
+        val title = mealTime.title?.trim()
+        if (!title.isNullOrEmpty()) return title
+        val name = mealTime.name?.trim()
+        if (!name.isNullOrEmpty()) return name
+
         return when (mealTime.id) {
-            "1" -> "Завтрак"
-            "2" -> "Второй завтрак"
-            "3" -> "Обед"
-            "4" -> "Полдник"
-            "5" -> "Ужин"
-            "6" -> "Второй ужин"
-            else -> mealTime.title ?: mealTime.name ?: "Приём пищи"
+            "1" -> strings?.breakfast ?: "Завтрак"
+            "2" -> strings?.morningSnack ?: "Второй завтрак"
+            "3" -> strings?.lunch ?: "Обед"
+            "4" -> strings?.afternoonSnack ?: "Полдник"
+            "5" -> strings?.dinner ?: "Ужин"
+            "6" -> strings?.secondDinner ?: "Второй ужин"
+            else -> strings?.meal ?: "Приём пищи"
         }
     }
 }

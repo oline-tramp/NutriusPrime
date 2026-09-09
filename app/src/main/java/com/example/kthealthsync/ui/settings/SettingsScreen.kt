@@ -1,6 +1,7 @@
 package com.example.kthealthsync.ui.settings
 
 import android.app.TimePickerDialog
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -20,6 +21,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.kthealthsync.domain.model.AppLanguage
+import com.example.kthealthsync.domain.model.LocalAppStrings
 import com.example.kthealthsync.domain.model.NutrientGoals
 import java.util.Locale
 
@@ -31,6 +34,7 @@ fun SettingsScreen(
     onRequestPermissions: () -> Unit,
     onLoginClick: () -> Unit
 ) {
+    val strings = LocalAppStrings.current
     val scrollState = rememberScrollState()
     val context = LocalContext.current
 
@@ -40,8 +44,10 @@ fun SettingsScreen(
     val autoSyncEnabled by viewModel.autoSyncEnabled.collectAsState()
     val nutrientGoals by viewModel.nutrientGoals.collectAsState()
     val isSyncingGoals by viewModel.isSyncingGoals.collectAsState()
+    val currentAppLanguage by viewModel.appLanguage.collectAsState()
 
     var showGoalsDialog by remember { mutableStateOf(false) }
+    var showLanguageDialog by remember { mutableStateOf(false) }
 
     val timePickerDialog = remember(syncHour, syncMinute) {
         TimePickerDialog(
@@ -58,7 +64,7 @@ fun SettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Settings") },
+                title = { Text(strings.settingsTitle) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -73,6 +79,21 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .verticalScroll(scrollState)
         ) {
+            SettingSectionHeader(strings.appLanguageLabel)
+            SettingItem(
+                icon = Icons.Default.Settings,
+                title = strings.appLanguageLabel,
+                subtitle = when (currentAppLanguage) {
+                    AppLanguage.AUTO -> "Auto (Kalorické Tabulky)"
+                    AppLanguage.RU -> "Русский"
+                    AppLanguage.CS -> "Čeština"
+                    AppLanguage.EN -> "English"
+                },
+                onClick = { showLanguageDialog = true }
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = Color(0xFF2A2A2A))
+
             SettingSectionHeader("Authentication")
             SettingItem(
                 icon = Icons.Default.Info,
@@ -158,6 +179,49 @@ fun SettingsScreen(
             }
         )
     }
+
+    if (showLanguageDialog) {
+        AlertDialog(
+            onDismissRequest = { showLanguageDialog = false },
+            title = { Text(strings.appLanguageLabel) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(
+                        AppLanguage.AUTO to "Auto (Kalorické Tabulky)",
+                        AppLanguage.RU to "Русский",
+                        AppLanguage.CS to "Čeština",
+                        AppLanguage.EN to "English"
+                    ).forEach { (lang, label) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    viewModel.updateAppLanguage(lang)
+                                    showLanguageDialog = false
+                                }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = currentAppLanguage == lang,
+                                onClick = {
+                                    viewModel.updateAppLanguage(lang)
+                                    showLanguageDialog = false
+                                }
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(text = label, color = Color.White)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showLanguageDialog = false }) {
+                    Text(strings.close, color = Color(0xFF64FFDA))
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -192,6 +256,7 @@ fun NutrientGoalsDialog(
             }
         },
         confirmButton = {
+            val strings = LocalAppStrings.current
             Button(onClick = {
                 val updated = NutrientGoals(
                     kcal = kcal.toDoubleOrNull() ?: currentGoals.kcal,
@@ -204,11 +269,12 @@ fun NutrientGoalsDialog(
                 )
                 onSave(updated)
             }) {
-                Text("Save")
+                Text(strings.save)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            val strings = LocalAppStrings.current
+            TextButton(onClick = onDismiss) { Text(strings.cancel) }
         }
     )
 }

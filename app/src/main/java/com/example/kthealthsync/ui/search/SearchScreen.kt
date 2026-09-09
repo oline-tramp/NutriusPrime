@@ -26,6 +26,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.kthealthsync.AutocompleteResponseItem
 import com.example.kthealthsync.domain.model.AddedFoodInfo
+import com.example.kthealthsync.domain.model.LocalAppStrings
 import com.example.kthealthsync.ui.search.components.AddFoodDialog
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -44,6 +45,7 @@ fun SearchScreen(
     onBack: () -> Unit,
     onFoodAdded: (AddedFoodInfo) -> Unit
 ) {
+    val strings = LocalAppStrings.current
     val query by viewModel.query.collectAsState()
     val results by viewModel.results.collectAsState()
     val frequentItems by viewModel.frequentItems.collectAsState()
@@ -104,12 +106,12 @@ fun SearchScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Search Food/Water") },
+                title = { Text(strings.searchPlaceholder.removeSuffix("...")) },
                 navigationIcon = {
                     IconButton(onClick = {
                         viewModel.clearSearch()
                         onBack()
-                    }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
+                    }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = strings.cancel) }
                 }
             )
         }
@@ -123,7 +125,7 @@ fun SearchScreen(
             OutlinedTextField(
                 value = query,
                 onValueChange = { viewModel.onQueryChange(it) },
-                label = { Text("Search (e.g. voda, chleba)") },
+                label = { Text(strings.searchPlaceholder) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .focusRequester(focusRequester),
@@ -131,7 +133,7 @@ fun SearchScreen(
                 trailingIcon = {
                     if (query.isNotEmpty()) {
                         IconButton(onClick = { viewModel.clearSearch() }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Clear search")
+                            Icon(Icons.Default.Clear, contentDescription = strings.clear)
                         }
                     }
                 }
@@ -152,8 +154,8 @@ fun SearchScreen(
 
                 if (query.length < 3) {
                     TabRow(selectedTabIndex = selectedTab) {
-                        Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, text = { Text("Frequent") })
-                        Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = { Text("Favorites") })
+                        Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, text = { Text(strings.frequentTab) })
+                        Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = { Text(strings.favoritesTab) })
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                 }
@@ -194,7 +196,7 @@ fun SearchScreen(
                                 if (isCurrentlyLoading) {
                                     CircularProgressIndicator(modifier = Modifier.size(24.dp))
                                 } else {
-                                    Text("Load more...", color = MaterialTheme.colorScheme.primary, fontSize = 14.sp)
+                                    Text(strings.loadMore, color = MaterialTheme.colorScheme.primary, fontSize = 14.sp)
                                 }
                             }
                         }

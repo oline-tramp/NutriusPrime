@@ -25,6 +25,7 @@ import com.example.kthealthsync.AddFoodRequest
 import com.example.kthealthsync.FoodFormUnitOption
 import com.example.kthealthsync.Foodstuff
 import com.example.kthealthsync.UnitOption
+import com.example.kthealthsync.domain.model.LocalAppStrings
 import com.example.kthealthsync.domain.model.NutrientGoals
 import com.example.kthealthsync.domain.util.NutrientUtils
 import kotlinx.coroutines.launch
@@ -92,11 +93,12 @@ fun EditFoodDialog(
     onSuccess: () -> Unit,
     onDelete: () -> Unit = {}
 ) {
+    val strings = LocalAppStrings.current
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val formatter = remember { DateTimeFormatter.ofPattern("dd.MM.yyyy") }
 
-    val timeOptions = remember { NutrientUtils.STANDARD_MEAL_OPTIONS }
+    val timeOptions = remember(strings) { NutrientUtils.getStandardMealOptions(strings) }
 
     val (parsedInitAmount, parsedInitUnit) = remember(food.unit) {
         parseInitialAmountAndUnit(food.unit)
@@ -189,7 +191,7 @@ fun EditFoodDialog(
         }
     }
 
-    val title = food.title ?: food.name ?: food.nazev ?: "Редактирование записи"
+    val title = food.title ?: food.name ?: food.nazev ?: strings.editTitle
 
     // Calculate current preview nutrition based on user input
     val currentAmountVal = amountText.replace(",", ".").toDoubleOrNull() ?: 0.0
@@ -208,7 +210,7 @@ fun EditFoodDialog(
         title = {
             Column {
                 Text(
-                    text = if (isClone) "📋 Клонирование" else "✏️ Редактирование",
+                    text = if (isClone) "📋 ${strings.cloneAction}" else "✏️ ${strings.editTitle}",
                     fontSize = 13.sp,
                     color = if (isClone) Color(0xFF81C784) else MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.SemiBold
@@ -253,7 +255,7 @@ fun EditFoodDialog(
                         // Amount TextField
                         Column(modifier = Modifier.weight(0.45f)) {
                             Text(
-                                text = "Количество",
+                                text = strings.amountLabel,
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
@@ -271,7 +273,7 @@ fun EditFoodDialog(
                         var unitExpanded by remember { mutableStateOf(false) }
                         Column(modifier = Modifier.weight(0.55f)) {
                             Text(
-                                text = "Единица",
+                                text = strings.unitLabel,
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
@@ -311,7 +313,7 @@ fun EditFoodDialog(
                     var mealExpanded by remember { mutableStateOf(false) }
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Text(
-                            text = "Приём пищи",
+                            text = strings.mealTimeLabel,
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
@@ -349,7 +351,7 @@ fun EditFoodDialog(
                     // Date Selection Chips
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Text(
-                            text = "Дата: ${targetDate.format(formatter)}",
+                            text = "${strings.dateToday.substringBefore(" ")}: ${targetDate.format(formatter)}",
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
@@ -361,17 +363,17 @@ fun EditFoodDialog(
                             FilterChip(
                                 selected = targetDate == currentDate.toLocalDate(),
                                 onClick = { targetDate = currentDate.toLocalDate() },
-                                label = { Text("Этот день", fontSize = 11.sp) }
+                                label = { Text(strings.dateThisDay, fontSize = 11.sp) }
                             )
                             FilterChip(
                                 selected = targetDate == LocalDate.now(),
                                 onClick = { targetDate = LocalDate.now() },
-                                label = { Text("Сегодня", fontSize = 11.sp) }
+                                label = { Text(strings.dateToday, fontSize = 11.sp) }
                             )
                             FilterChip(
                                 selected = targetDate == LocalDate.now().minusDays(1),
                                 onClick = { targetDate = LocalDate.now().minusDays(1) },
-                                label = { Text("Вчера", fontSize = 11.sp) }
+                                label = { Text(strings.dateYesterday, fontSize = 11.sp) }
                             )
                         }
 
@@ -392,7 +394,7 @@ fun EditFoodDialog(
                         ) {
                             Icon(Icons.Default.DateRange, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Выбрать другую дату...", fontSize = 12.sp)
+                            Text(strings.chooseAnotherDate, fontSize = 12.sp)
                         }
                     }
 
@@ -408,9 +410,9 @@ fun EditFoodDialog(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("Итого за порцию:", fontSize = 12.sp, color = Color.LightGray)
+                                Text(strings.portionTotal.substringBefore("|").trim(), fontSize = 12.sp, color = Color.LightGray)
                                 Text(
-                                    text = "$previewKcal ккал",
+                                    text = "$previewKcal ${strings.kcalUnit}",
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFFFFD54F)
@@ -421,11 +423,11 @@ fun EditFoodDialog(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text("Б: ${String.format(Locale.US, "%.1f", previewProt)} г", fontSize = 11.sp, color = Color(0xFFE57373))
-                                Text("Ж: ${String.format(Locale.US, "%.1f", previewFat)} г", fontSize = 11.sp, color = Color(0xFFFFD54F))
-                                Text("У: ${String.format(Locale.US, "%.1f", previewCarbs)} г", fontSize = 11.sp, color = Color(0xFF64B5F6))
+                                Text("${strings.proteinShort}: ${String.format(Locale.US, "%.1f", previewProt)} g", fontSize = 11.sp, color = Color(0xFFE57373))
+                                Text("${strings.fatShort}: ${String.format(Locale.US, "%.1f", previewFat)} g", fontSize = 11.sp, color = Color(0xFFFFD54F))
+                                Text("${strings.carbsShort}: ${String.format(Locale.US, "%.1f", previewCarbs)} g", fontSize = 11.sp, color = Color(0xFF64B5F6))
                                 if (previewFiber > 0.1) {
-                                    Text("Кл: ${String.format(Locale.US, "%.1f", previewFiber)} г", fontSize = 11.sp, color = Color(0xFFAED581))
+                                    Text("${strings.fiberShort}: ${String.format(Locale.US, "%.1f", previewFiber)} g", fontSize = 11.sp, color = Color(0xFFAED581))
                                 }
                             }
                         }
@@ -438,11 +440,11 @@ fun EditFoodDialog(
                 onClick = {
                     val finalAmount = amountText.replace(",", ".").toDoubleOrNull()
                     if (finalAmount == null || finalAmount <= 0.0) {
-                        errorMsg = "Введите корректное количество"
+                        errorMsg = strings.invalidAmountError
                         return@Button
                     }
                     if (food.id.isNullOrBlank()) {
-                        errorMsg = "ID записи не найден"
+                        errorMsg = strings.idNotFoundError
                         return@Button
                     }
 
@@ -478,7 +480,7 @@ fun EditFoodDialog(
                                 if (success) {
                                     onSuccess()
                                 } else {
-                                    errorMsg = "Ошибка клонирования записи"
+                                    errorMsg = strings.cloneError
                                 }
                             }
                         } else {
@@ -490,7 +492,7 @@ fun EditFoodDialog(
                                 if (success) {
                                     onSuccess()
                                 } else {
-                                    errorMsg = "Ошибка сохранения изменений"
+                                    errorMsg = strings.saveError
                                 }
                             }
                         }
@@ -508,14 +510,14 @@ fun EditFoodDialog(
                         color = if (isClone) Color.White else Color.Black
                     )
                 } else {
-                    Text(if (isClone) "Клонировать" else "Сохранить", fontWeight = FontWeight.Bold)
+                    Text(if (isClone) strings.cloneAction else strings.save, fontWeight = FontWeight.Bold)
                 }
             }
         },
         dismissButton = {
             if (isClone) {
                 TextButton(onClick = onDismiss) {
-                    Text("Отмена", color = Color.LightGray)
+                    Text(strings.cancel, color = Color.LightGray)
                 }
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -525,14 +527,14 @@ fun EditFoodDialog(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Delete,
-                            contentDescription = "Удалить",
+                            contentDescription = strings.deleteAction,
                             tint = Color(0xFFEF5350),
                             modifier = Modifier.size(18.dp)
                         )
                     }
                     Spacer(modifier = Modifier.width(4.dp))
                     TextButton(onClick = onDismiss) {
-                        Text("Отмена", color = Color.LightGray)
+                        Text(strings.cancel, color = Color.LightGray)
                     }
                 }
             }
@@ -542,10 +544,10 @@ fun EditFoodDialog(
     if (!isClone && showDeleteConfirmation) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirmation = false },
-            title = { Text("Удалить запись?") },
+            title = { Text(strings.deleteConfirmTitle) },
             text = {
-                val displayName = food.title ?: food.name ?: food.nazev ?: "продукт"
-                Text("Вы уверены, что хотите удалить «$displayName» из дневника?")
+                val displayName = food.title ?: food.name ?: food.nazev ?: strings.unnamedFood
+                Text(String.format(strings.deleteSingleConfirmText, displayName))
             },
             confirmButton = {
                 Button(
@@ -555,12 +557,12 @@ fun EditFoodDialog(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF5350))
                 ) {
-                    Text("Удалить", color = Color.White)
+                    Text(strings.deleteAction, color = Color.White)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirmation = false }) {
-                    Text("Отмена")
+                    Text(strings.cancel)
                 }
             }
         )

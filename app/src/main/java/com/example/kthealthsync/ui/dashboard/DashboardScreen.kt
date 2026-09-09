@@ -74,6 +74,7 @@ import com.example.kthealthsync.Foodstuff
 import com.example.kthealthsync.MealTime
 import com.example.kthealthsync.domain.model.DailySummary
 import com.example.kthealthsync.domain.model.FoodBreakdown
+import com.example.kthealthsync.domain.model.LocalAppStrings
 import com.example.kthealthsync.domain.model.ShareFormatType
 import com.example.kthealthsync.domain.util.NutrientUtils
 import java.time.LocalDate
@@ -89,6 +90,7 @@ fun DashboardScreen(
     onDebugClick: () -> Unit,
     onAddFoodClick: (mealTimeGuid: String?) -> Unit
 ) {
+    val strings = LocalAppStrings.current
     val context = LocalContext.current
     val selectedDate by viewModel.selectedDate.collectAsState()
     val withMeals by viewModel.withMeals.collectAsState()
@@ -100,9 +102,9 @@ fun DashboardScreen(
     val isYesterday = selectedDate.toLocalDate() == now.minusDays(1).toLocalDate()
 
     val dateDisplay = when {
-        isToday -> "Today"
-        isYesterday -> "Yesterday"
-        else -> selectedDate.format(DateTimeFormatter.ofPattern("EEE, MMM dd", Locale.getDefault()))
+        isToday -> strings.dateToday
+        isYesterday -> strings.dateYesterday
+        else -> selectedDate.format(DateTimeFormatter.ofPattern("EEE, MMM dd", strings.language.toLocale()))
     }
     val canGoForward = !isToday
     val density = LocalDensity.current
@@ -158,16 +160,16 @@ fun DashboardScreen(
                         if (state is DashboardUiState.Success) {
                             showShareDialog = true
                         } else {
-                            Toast.makeText(context, "Нет данных за выбранный день", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, strings.noDiaryEntries, Toast.LENGTH_SHORT).show()
                         }
                     }) {
-                        Icon(Icons.Default.Share, contentDescription = "Поделиться данными дня")
+                        Icon(Icons.Default.Share, contentDescription = null)
                     }
                     IconButton(onClick = onDebugClick) {
                         Icon(Icons.Default.Info, contentDescription = "Debug")
                     }
                     IconButton(onClick = onSettingsClick) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings")
+                        Icon(Icons.Default.Settings, contentDescription = strings.settingsTitle)
                     }
                 }
             )
@@ -186,7 +188,7 @@ fun DashboardScreen(
                     }
                 },
                 confirmButton = {
-                    TextButton(onClick = { showPopupFor = null }) { Text("Close") }
+                    TextButton(onClick = { showPopupFor = null }) { Text(strings.close) }
                 }
             )
         }
@@ -207,7 +209,7 @@ fun DashboardScreen(
                         )
                         if (copyOnly) {
                             clipboardManager.setText(AnnotatedString(shareText))
-                            Toast.makeText(context, "Скопировано в буфер обмена!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, strings.saveSuccess, Toast.LENGTH_SHORT).show()
                         } else {
                             val sendIntent = Intent().apply {
                                 action = Intent.ACTION_SEND
@@ -282,7 +284,7 @@ fun DashboardScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.End
                 ) {
-                    Text("With meals", fontSize = 12.sp, color = Color.Gray)
+                    Text(strings.withMeals, fontSize = 12.sp, color = Color.Gray)
                     Spacer(modifier = Modifier.width(4.dp))
                     Switch(
                         checked = withMeals,
@@ -303,7 +305,7 @@ fun DashboardScreen(
                                 Text(state.message, color = MaterialTheme.colorScheme.error)
                                 Spacer(modifier = Modifier.height(16.dp))
                                 Button(onClick = { viewModel.refresh() }) {
-                                    Text("Retry")
+                                    Text(strings.retry)
                                 }
                             }
                         }
@@ -327,7 +329,7 @@ fun DashboardScreen(
                                 .size(148.dp)
                                 .clickable {
                                     if (summary.kcalBreakdown.isNotEmpty()) {
-                                        showPopupFor = "Calories" to summary.kcalBreakdown
+                                        showPopupFor = "${strings.energy} (${strings.kcalUnit})" to summary.kcalBreakdown
                                     }
                                 }
                         ) {
@@ -370,7 +372,7 @@ fun DashboardScreen(
                                 )
                                 if (goalKcal > 0) {
                                     Text(
-                                        text = "/ ${goalKcal.toInt()} kcal",
+                                        text = "/ ${goalKcal.toInt()} ${strings.kcalUnit}",
                                         fontSize = 11.sp,
                                         color = Color(0xFFAAAAAA)
                                     )
@@ -383,7 +385,7 @@ fun DashboardScreen(
                                     )
                                 } else {
                                     Text(
-                                        text = "kcal",
+                                        text = strings.kcalUnit,
                                         fontSize = 12.sp,
                                         color = Color(0xFFAAAAAA)
                                     )
@@ -399,31 +401,31 @@ fun DashboardScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             MacroItem(
-                                name = "Protein",
+                                name = strings.protein,
                                 amount = summary.protein,
                                 goal = nutrientGoals.protein,
                                 color = Color(0xFFE57373),
                                 modifier = Modifier.weight(1f)
                             ) {
-                                if (summary.proteinBreakdown.isNotEmpty()) showPopupFor = "Protein" to summary.proteinBreakdown
+                                if (summary.proteinBreakdown.isNotEmpty()) showPopupFor = strings.protein to summary.proteinBreakdown
                             }
                             MacroItem(
-                                name = "Fat",
+                                name = strings.fat,
                                 amount = summary.fat,
                                 goal = nutrientGoals.fat,
                                 color = Color(0xFFFFD54F),
                                 modifier = Modifier.weight(1f)
                             ) {
-                                if (summary.fatBreakdown.isNotEmpty()) showPopupFor = "Fat" to summary.fatBreakdown
+                                if (summary.fatBreakdown.isNotEmpty()) showPopupFor = strings.fat to summary.fatBreakdown
                             }
                             MacroItem(
-                                name = "Carbs",
+                                name = strings.carbs,
                                 amount = summary.carb,
                                 goal = nutrientGoals.carbs,
                                 color = Color(0xFF64B5F6),
                                 modifier = Modifier.weight(1f)
                             ) {
-                                if (summary.carbBreakdown.isNotEmpty()) showPopupFor = "Carbohydrates" to summary.carbBreakdown
+                                if (summary.carbBreakdown.isNotEmpty()) showPopupFor = strings.carbs to summary.carbBreakdown
                             }
                         }
 
@@ -441,51 +443,51 @@ fun DashboardScreen(
                             val waterStr = if (waterGoalLiters > 0) String.format(Locale.US, "%.1f/%.1fL", waterLiters, waterGoalLiters) else String.format(Locale.US, "%.1f L", waterLiters)
                             val waterProgress = if (nutrientGoals.water > 0) (summary.water / nutrientGoals.water).toFloat() else null
                             MicroItem(
-                                icon = "💧 Water",
+                                icon = strings.water,
                                 value = waterStr,
                                 progress = waterProgress,
                                 progressColor = Color(0xFF4FC3F7),
                                 modifier = Modifier.weight(1f)
                             ) {
-                                if (summary.waterBreakdown.isNotEmpty()) showPopupFor = "💧 Water" to summary.waterBreakdown
+                                if (summary.waterBreakdown.isNotEmpty()) showPopupFor = strings.water to summary.waterBreakdown
                             }
 
                             val fiberStr = if (nutrientGoals.fiber > 0) "${summary.fiber.toInt()}/${nutrientGoals.fiber.toInt()}g" else "${summary.fiber.toInt()} g"
                             val fiberProgress = if (nutrientGoals.fiber > 0) (summary.fiber / nutrientGoals.fiber).toFloat() else null
                             MicroItem(
-                                icon = "🌾 Fiber",
+                                icon = strings.fiber,
                                 value = fiberStr,
                                 progress = fiberProgress,
                                 progressColor = Color(0xFFAED581),
                                 modifier = Modifier.weight(1f)
                             ) {
-                                if (summary.fiberBreakdown.isNotEmpty()) showPopupFor = "🌾 Fiber" to summary.fiberBreakdown
+                                if (summary.fiberBreakdown.isNotEmpty()) showPopupFor = strings.fiber to summary.fiberBreakdown
                             }
 
                             val sugarStr = if (nutrientGoals.sugar > 0) "${summary.sugar.toInt()}/${nutrientGoals.sugar.toInt()}g" else "${summary.sugar.toInt()} g"
                             val sugarProgress = if (nutrientGoals.sugar > 0) (summary.sugar / nutrientGoals.sugar).toFloat() else null
                             val sugarColor = if (nutrientGoals.sugar > 0 && summary.sugar > nutrientGoals.sugar) Color(0xFFEF5350) else Color(0xFFFFB74D)
                             MicroItem(
-                                icon = "🍬 Sugar",
+                                icon = strings.sugar,
                                 value = sugarStr,
                                 progress = sugarProgress,
                                 progressColor = sugarColor,
                                 modifier = Modifier.weight(1f)
                             ) {
-                                if (summary.sugarBreakdown.isNotEmpty()) showPopupFor = "🍬 Sugar" to summary.sugarBreakdown
+                                if (summary.sugarBreakdown.isNotEmpty()) showPopupFor = strings.sugar to summary.sugarBreakdown
                             }
 
                             val saltStr = if (nutrientGoals.salt > 0) String.format(Locale.US, "%.1f/%.1fg", summary.salt, nutrientGoals.salt) else String.format(Locale.US, "%.1f g", summary.salt)
                             val saltProgress = if (nutrientGoals.salt > 0) (summary.salt / nutrientGoals.salt).toFloat() else null
                             val saltColor = if (nutrientGoals.salt > 0 && summary.salt > nutrientGoals.salt) Color(0xFFEF5350) else Color(0xFF90A4AE)
                             MicroItem(
-                                icon = "🧂 Salt",
+                                icon = strings.salt,
                                 value = saltStr,
                                 progress = saltProgress,
                                 progressColor = saltColor,
                                 modifier = Modifier.weight(1f)
                             ) {
-                                if (summary.saltBreakdown.isNotEmpty()) showPopupFor = "🧂 Salt" to summary.saltBreakdown
+                                if (summary.saltBreakdown.isNotEmpty()) showPopupFor = strings.salt to summary.saltBreakdown
                             }
                         }
 
@@ -496,26 +498,26 @@ fun DashboardScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            MicroItem("🥦 Veg", "${summary.vegGrams.toInt()} g", modifier = Modifier.weight(1f)) {
-                                if (summary.vegBreakdown.isNotEmpty()) showPopupFor = "🥦 Vegetables" to summary.vegBreakdown
+                            MicroItem(strings.veg, "${summary.vegGrams.toInt()} g", modifier = Modifier.weight(1f)) {
+                                if (summary.vegBreakdown.isNotEmpty()) showPopupFor = strings.veg to summary.vegBreakdown
                             }
-                            MicroItem("🍎 Fruit", "${summary.fruitGrams.toInt()} g", modifier = Modifier.weight(1f)) {
-                                if (summary.fruitBreakdown.isNotEmpty()) showPopupFor = "🍎 Fruits" to summary.fruitBreakdown
+                            MicroItem(strings.fruit, "${summary.fruitGrams.toInt()} g", modifier = Modifier.weight(1f)) {
+                                if (summary.fruitBreakdown.isNotEmpty()) showPopupFor = strings.fruit to summary.fruitBreakdown
                             }
                             val vegFruitTarget = if (nutrientGoals.vegFruit > 0) nutrientGoals.vegFruit else 400.0
                             val totalVegFruit = (summary.vegGrams + summary.fruitGrams).toInt()
                             val vfProgress = (totalVegFruit / vegFruitTarget).toFloat()
                             MicroItem(
-                                icon = "🥗 Total",
+                                icon = strings.vegFruitTotal,
                                 value = "$totalVegFruit/${vegFruitTarget.toInt()}g",
                                 progress = vfProgress,
                                 progressColor = Color(0xFF81C784),
                                 modifier = Modifier.weight(1f)
                             ) {
-                                if (summary.vegFruitBreakdown.isNotEmpty()) showPopupFor = "🥗 Vegetables & Fruits" to summary.vegFruitBreakdown
+                                if (summary.vegFruitBreakdown.isNotEmpty()) showPopupFor = strings.vegFruitTotal to summary.vegFruitBreakdown
                             }
-                            MicroItem("💊 Supps", "${summary.supplementCount} pcs", modifier = Modifier.weight(1f)) {
-                                if (summary.supplementBreakdown.isNotEmpty()) showPopupFor = "💊 Supplements" to summary.supplementBreakdown
+                            MicroItem(strings.supps, "${summary.supplementCount} ${strings.pcs}", modifier = Modifier.weight(1f)) {
+                                if (summary.supplementBreakdown.isNotEmpty()) showPopupFor = strings.supps to summary.supplementBreakdown
                             }
                         }
 
@@ -553,9 +555,9 @@ fun DashboardScreen(
                             onCloneFoodToMeal = { food, targetMealTimeId ->
                                 viewModel.cloneEntries(listOf(food), targetMealTimeId, null) { success ->
                                     if (success) {
-                                        Toast.makeText(context, "Запись клонирована", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, strings.cloneSuccess, Toast.LENGTH_SHORT).show()
                                     } else {
-                                        Toast.makeText(context, "Ошибка при клонировании", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, strings.cloneError, Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             }
@@ -592,7 +594,7 @@ fun DashboardScreen(
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = "Выбрано: ${selectedEntryIds.size}",
+                                text = String.format(strings.selectedCount, selectedEntryIds.size),
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 13.sp,
                                 color = Color.White
@@ -605,7 +607,7 @@ fun DashboardScreen(
                                 contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
                             ) {
                                 Text(
-                                    text = if (selectedEntryIds.size == allValidIds.size) "Снять всё" else "Все (${allValidIds.size})",
+                                    text = if (selectedEntryIds.size == allValidIds.size) strings.deselectAll else String.format(strings.selectAll, allValidIds.size),
                                     fontSize = 12.sp,
                                     color = MaterialTheme.colorScheme.primary
                                 )
@@ -628,11 +630,11 @@ fun DashboardScreen(
                             ) {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                    contentDescription = "Перенести",
+                                    contentDescription = strings.moveAction,
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Перенести", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                Text(strings.moveAction, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                             }
 
                             Spacer(modifier = Modifier.width(6.dp))
@@ -652,11 +654,11 @@ fun DashboardScreen(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.ContentCopy,
-                                    contentDescription = "Клонировать",
+                                    contentDescription = strings.cloneAction,
                                     modifier = Modifier.size(15.dp)
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Клон", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                Text(strings.cloneAction, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                             }
 
                             Spacer(modifier = Modifier.width(6.dp))
@@ -676,11 +678,11 @@ fun DashboardScreen(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Delete,
-                                    contentDescription = "Удалить",
+                                    contentDescription = strings.deleteAction,
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Удалить", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                Text(strings.deleteAction, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                             }
                         }
                     }
@@ -702,9 +704,9 @@ fun DashboardScreen(
                     onConfirm = { targetTimeId, targetDateStr ->
                         viewModel.moveEntries(targetIds, targetTimeId, targetDateStr) { success ->
                             if (success) {
-                                Toast.makeText(context, "Записи успешно перенесены", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, strings.moveSuccess, Toast.LENGTH_SHORT).show()
                             } else {
-                                Toast.makeText(context, "Ошибка при переносе", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, strings.moveError, Toast.LENGTH_SHORT).show()
                             }
                         }
                         showMoveDialog = false
@@ -735,7 +737,7 @@ fun DashboardScreen(
                         singleCloneTargetFood = null
                     },
                     onSuccess = {
-                        Toast.makeText(context, "Запись клонирована", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, strings.cloneSuccess, Toast.LENGTH_SHORT).show()
                         showCloneDialog = false
                         singleCloneTargetFood = null
                         selectedEntryIds = emptySet()
@@ -752,9 +754,9 @@ fun DashboardScreen(
                     onConfirm = { targetTimeId, targetDateStr ->
                         viewModel.cloneEntries(targetFoods, targetTimeId, targetDateStr) { success ->
                             if (success) {
-                                Toast.makeText(context, "Записи успешно клонированы", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, strings.cloneSuccess, Toast.LENGTH_SHORT).show()
                             } else {
-                                Toast.makeText(context, "Ошибка при клонировании", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, strings.cloneError, Toast.LENGTH_SHORT).show()
                             }
                         }
                         showCloneDialog = false
@@ -778,7 +780,7 @@ fun DashboardScreen(
                         editTarget = null
                     },
                     onSuccess = {
-                        Toast.makeText(context, "Запись сохранена", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, strings.saveSuccess, Toast.LENGTH_SHORT).show()
                         showEditDialog = false
                         editTarget = null
                     },
@@ -787,9 +789,9 @@ fun DashboardScreen(
                         if (!entryId.isNullOrBlank()) {
                             viewModel.deleteEntries(setOf(entryId)) { success ->
                                 if (success) {
-                                    Toast.makeText(context, "Запись удалена", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, strings.deleteSuccess, Toast.LENGTH_SHORT).show()
                                 } else {
-                                    Toast.makeText(context, "Ошибка при удалении", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, strings.deleteError, Toast.LENGTH_SHORT).show()
                                 }
                             }
                         }
@@ -809,11 +811,11 @@ fun DashboardScreen(
                         showDeleteDialog = false
                         singleDeleteTargetId = null
                     },
-                    title = { Text("Удалить записи?") },
+                    title = { Text(strings.deleteConfirmTitle) },
                     text = {
                         Text(
-                            if (targetIds.size == 1) "Вы уверены, что хотите удалить эту запись из дневника?"
-                            else "Вы уверены, что хотите удалить выбранные записи (${targetIds.size} шт.) из дневника?"
+                            if (targetIds.size == 1) String.format(strings.deleteSingleConfirmText, "")
+                            else String.format(strings.deleteMultiConfirmText, targetIds.size)
                         )
                     },
                     confirmButton = {
@@ -821,9 +823,9 @@ fun DashboardScreen(
                             onClick = {
                                 viewModel.deleteEntries(targetIds) { success ->
                                     if (success) {
-                                        Toast.makeText(context, "Записи удалены", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, strings.deleteSuccess, Toast.LENGTH_SHORT).show()
                                     } else {
-                                        Toast.makeText(context, "Ошибка при удалении", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, strings.deleteError, Toast.LENGTH_SHORT).show()
                                     }
                                 }
                                 showDeleteDialog = false
@@ -832,7 +834,7 @@ fun DashboardScreen(
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF5350))
                         ) {
-                            Text("Удалить", color = Color.White)
+                            Text(strings.deleteAction, color = Color.White)
                         }
                     },
                     dismissButton = {
@@ -840,7 +842,7 @@ fun DashboardScreen(
                             showDeleteDialog = false
                             singleDeleteTargetId = null
                         }) {
-                            Text("Отмена")
+                            Text(strings.cancel)
                         }
                     }
                 )
@@ -1035,11 +1037,12 @@ fun ShareOptionsDialog(
     onDismiss: () -> Unit,
     onOptionSelected: (ShareFormatType, Boolean) -> Unit
 ) {
+    val strings = LocalAppStrings.current
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Column {
-                Text("Поделиться данными дня", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                Text(strings.shareDayTitle, fontWeight = FontWeight.Bold, fontSize = 20.sp)
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(dateDisplay, fontSize = 13.sp, color = Color.Gray)
             }
@@ -1111,7 +1114,7 @@ fun ShareOptionsDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text("Закрыть")
+                Text(strings.close)
             }
         }
     )
@@ -1139,6 +1142,7 @@ fun DailyDiarySpoiler(
     onMoveFoodToMeal: (foodId: String, targetMealTimeId: String) -> Unit,
     onCloneFoodToMeal: (food: Foodstuff, targetMealTimeId: String) -> Unit
 ) {
+    val strings = LocalAppStrings.current
     var isDiaryExpanded by rememberSaveable(dateStr) { mutableStateOf(true) }
     var draggedFoodState by remember { mutableStateOf<DraggedFoodState?>(null) }
     val mealBounds = remember { mutableStateMapOf<String, Rect>() }
@@ -1209,7 +1213,7 @@ fun DailyDiarySpoiler(
                     Column(modifier = Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = "Приёмы пищи",
+                                text = strings.mealsHeader,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 16.sp,
                                 color = Color.White
@@ -1230,7 +1234,7 @@ fun DailyDiarySpoiler(
                         }
                         if (allFoods.isNotEmpty()) {
                             Text(
-                                text = "Всего: ${totalKcal.toInt()} ккал",
+                                text = String.format(strings.totalKcalFormat, totalKcal.toInt()),
                                 fontSize = 12.sp,
                                 color = Color.Gray
                             )
@@ -1250,12 +1254,12 @@ fun DailyDiarySpoiler(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Add,
-                            contentDescription = "Добавить продукт",
+                            contentDescription = strings.add,
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "Добавить",
+                            text = strings.add,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -1269,7 +1273,7 @@ fun DailyDiarySpoiler(
                     ) {
                         Icon(
                             imageVector = if (isDiaryExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                            contentDescription = if (isDiaryExpanded) "Свернуть" else "Развернуть",
+                            contentDescription = null,
                             tint = Color.LightGray
                         )
                     }
@@ -1290,7 +1294,7 @@ fun DailyDiarySpoiler(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = "Нет данных дневника за этот день",
+                                    text = strings.noDiaryEntries,
                                     color = Color.Gray,
                                     fontSize = 13.sp
                                 )
@@ -1392,7 +1396,7 @@ fun DailyDiarySpoiler(
         draggedFoodState?.let { dragInfo ->
             val spoilerRoot = spoilerCoordinates?.localToRoot(Offset.Zero) ?: Offset.Zero
             val localOffset = dragInfo.rootPointer - spoilerRoot
-            val title = dragInfo.food.title ?: dragInfo.food.name ?: dragInfo.food.nazev ?: "Продукт"
+            val title = dragInfo.food.title ?: dragInfo.food.name ?: dragInfo.food.nazev ?: strings.unnamedFood
             val kcal = NutrientUtils.parseNutrient(dragInfo.food.energy).toInt()
             val isCloneAction = currentDropAction == DropAction.CLONE
             val isTargetValid = when {
@@ -1442,7 +1446,7 @@ fun DailyDiarySpoiler(
                     Spacer(modifier = Modifier.height(4.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "$kcal ккал",
+                            text = "$kcal ${strings.kcalUnit}",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = Color(0xFFFFD54F)
@@ -1450,9 +1454,9 @@ fun DailyDiarySpoiler(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = when {
-                                !isTargetValid -> "Перетащите на приём пищи"
-                                isCloneAction -> "Отпустите для клонирования 📋"
-                                else -> "Отпустите для переноса 📥"
+                                !isTargetValid -> strings.dragToMealHint
+                                isCloneAction -> strings.releaseToClone
+                                else -> strings.releaseToMove
                             },
                             fontSize = 11.sp,
                             color = if (isTargetValid) accentColor else Color.LightGray
@@ -1497,11 +1501,12 @@ fun MealTimeGroup(
         }
         prevFoodCount = foods.size
     }
+    val strings = LocalAppStrings.current
     val mealKcal = remember(foods) {
         foods.sumOf { NutrientUtils.parseNutrient(it.energy) }
     }
-    val mealDisplayName = remember(mealTime) {
-        NutrientUtils.getMealTimeDisplayName(mealTime)
+    val mealDisplayName = remember(mealTime, strings) {
+        NutrientUtils.getMealTimeDisplayName(mealTime, strings)
     }
 
     Card(
@@ -1543,7 +1548,7 @@ fun MealTimeGroup(
                     }
                     if (foods.isNotEmpty()) {
                         Text(
-                            text = "${mealKcal.toInt()} ккал",
+                            text = "${mealKcal.toInt()} ${strings.kcalUnit}",
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -1557,7 +1562,7 @@ fun MealTimeGroup(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Add,
-                        contentDescription = "Добавить в $mealDisplayName",
+                        contentDescription = "${strings.add} $mealDisplayName",
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(18.dp)
                     )
@@ -1572,7 +1577,7 @@ fun MealTimeGroup(
                 ) {
                     Icon(
                         imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                        contentDescription = if (isExpanded) "Свернуть" else "Развернуть",
+                        contentDescription = null,
                         tint = Color.Gray,
                         modifier = Modifier.size(18.dp)
                     )
@@ -1614,7 +1619,7 @@ fun MealTimeGroup(
                             Text("📥", fontSize = 12.sp)
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = if (canMoveHere) "Перенести" else "Тот же приём",
+                                text = if (canMoveHere) strings.moveAction else strings.sameMealHint,
                                 color = if (canMoveHere) Color(0xFF90CAF9) else Color.Gray,
                                 fontSize = 11.sp,
                                 fontWeight = if (isMoveHovered && canMoveHere) FontWeight.Bold else FontWeight.Normal
@@ -1645,7 +1650,7 @@ fun MealTimeGroup(
                             Text("📋", fontSize = 12.sp)
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "Клонировать",
+                                text = strings.cloneAction,
                                 color = Color(0xFFA5D6A7),
                                 fontSize = 11.sp,
                                 fontWeight = if (isCloneHovered) FontWeight.Bold else FontWeight.Normal
@@ -1664,7 +1669,7 @@ fun MealTimeGroup(
                 ) {
                     if (foods.isEmpty()) {
                         Text(
-                            text = "Нет записей",
+                            text = strings.noEntriesInMeal,
                             color = Color.DarkGray,
                             fontSize = 12.sp,
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
@@ -1732,7 +1737,8 @@ fun FoodEntryRow(
     onDragEnd: () -> Unit,
     onDragCancel: () -> Unit
 ) {
-    val title = food.title ?: food.name ?: food.nazev ?: "Без названия"
+    val strings = LocalAppStrings.current
+    val title = food.title ?: food.name ?: food.nazev ?: strings.unnamedFood
     val energyKcal = NutrientUtils.parseNutrient(food.energy).toInt()
     val protein = NutrientUtils.parseNutrient(food.protein).toInt()
     val fat = NutrientUtils.parseNutrient(food.fat).toInt()
@@ -1839,14 +1845,14 @@ fun FoodEntryRow(
                     Spacer(modifier = Modifier.width(6.dp))
                 }
                 Text(
-                    text = "$energyKcal ккал",
+                    text = "$energyKcal ${strings.kcalUnit}",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = Color(0xFFFFD54F)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = "Б:$protein Ж:$fat У:$carbs",
+                    text = "${strings.proteinShort}:$protein ${strings.fatShort}:$fat ${strings.carbsShort}:$carbs",
                     fontSize = 10.sp,
                     color = Color.Gray
                 )
@@ -1913,7 +1919,7 @@ fun FoodEntryRow(
             ) {
                 Icon(
                     imageVector = Icons.Default.ContentCopy,
-                    contentDescription = "Клонировать",
+                    contentDescription = strings.cloneAction,
                     tint = Color(0xFF81C784),
                     modifier = Modifier.size(15.dp)
                 )
@@ -1928,7 +1934,7 @@ fun FoodEntryRow(
             ) {
                 Icon(
                     imageVector = Icons.Default.Delete,
-                    contentDescription = "Удалить",
+                    contentDescription = strings.deleteAction,
                     tint = Color(0xFFEF5350),
                     modifier = Modifier.size(15.dp)
                 )
@@ -1945,10 +1951,11 @@ fun MoveEntriesDialog(
     onDismiss: () -> Unit,
     onConfirm: (targetTimeId: String, targetDateStr: String?) -> Unit
 ) {
+    val strings = LocalAppStrings.current
     val context = LocalContext.current
     var selectedMealTimeId by remember { mutableStateOf("1") }
     var mealExpanded by remember { mutableStateOf(false) }
-    val mealOptions = remember { NutrientUtils.STANDARD_MEAL_OPTIONS }
+    val mealOptions = remember(strings) { NutrientUtils.getStandardMealOptions(strings) }
     var targetDate by remember { mutableStateOf(currentDate.toLocalDate()) }
     val formatter = remember { DateTimeFormatter.ofPattern("dd.MM.yyyy") }
 
@@ -1956,7 +1963,7 @@ fun MoveEntriesDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = "Перенос ${if (count == 1) "записи" else "$count записей"}",
+                text = if (count == 1) strings.moveTitle else String.format(strings.moveMultiTitle, count),
                 fontWeight = FontWeight.Bold,
                 fontSize = 18.sp
             )
@@ -1964,7 +1971,7 @@ fun MoveEntriesDialog(
         text = {
             Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
                 Text(
-                    text = "Куда перенести:",
+                    text = strings.whereToMove,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = Color.White
@@ -1974,7 +1981,7 @@ fun MoveEntriesDialog(
 
                 // Date selection chips
                 Text(
-                    text = "Дата: ${targetDate.format(formatter)}",
+                    text = targetDate.format(formatter),
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Medium
@@ -1987,17 +1994,17 @@ fun MoveEntriesDialog(
                     FilterChip(
                         selected = targetDate == currentDate.toLocalDate(),
                         onClick = { targetDate = currentDate.toLocalDate() },
-                        label = { Text("Этот день", fontSize = 11.sp) }
+                        label = { Text(strings.dateThisDay, fontSize = 11.sp) }
                     )
                     FilterChip(
                         selected = targetDate == LocalDate.now(),
                         onClick = { targetDate = LocalDate.now() },
-                        label = { Text("Сегодня", fontSize = 11.sp) }
+                        label = { Text(strings.dateToday, fontSize = 11.sp) }
                     )
                     FilterChip(
                         selected = targetDate == LocalDate.now().minusDays(1),
                         onClick = { targetDate = LocalDate.now().minusDays(1) },
-                        label = { Text("Вчера", fontSize = 11.sp) }
+                        label = { Text(strings.dateYesterday, fontSize = 11.sp) }
                     )
                 }
 
@@ -2018,7 +2025,7 @@ fun MoveEntriesDialog(
                 ) {
                     Icon(Icons.Default.DateRange, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Выбрать другую дату...", fontSize = 12.sp)
+                    Text(strings.chooseAnotherDate, fontSize = 12.sp)
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -2032,10 +2039,10 @@ fun MoveEntriesDialog(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     OutlinedTextField(
-                        value = mealOptions.find { it.first == selectedMealTimeId }?.second ?: "Выберите приём",
+                        value = mealOptions.find { it.first == selectedMealTimeId }?.second ?: strings.chooseMeal,
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Приём пищи", fontSize = 12.sp) },
+                        label = { Text(strings.mealTimeLabel, fontSize = 12.sp) },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = mealExpanded) },
                         modifier = Modifier.fillMaxWidth().menuAnchor(),
                         colors = OutlinedTextFieldDefaults.colors(
@@ -2071,12 +2078,12 @@ fun MoveEntriesDialog(
                     contentColor = Color.Black
                 )
             ) {
-                Text("Перенести ($count)")
+                Text("${strings.moveAction} ($count)")
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Отмена")
+                Text(strings.cancel)
             }
         }
     )

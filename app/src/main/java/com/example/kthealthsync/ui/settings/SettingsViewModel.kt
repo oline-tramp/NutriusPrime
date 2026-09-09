@@ -57,6 +57,18 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         initialValue = NutrientGoals()
     )
 
+    val appLanguage: StateFlow<com.example.kthealthsync.domain.model.AppLanguage> = prefs.appLanguageFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = com.example.kthealthsync.domain.model.AppLanguage.AUTO
+    )
+
+    fun updateAppLanguage(language: com.example.kthealthsync.domain.model.AppLanguage) {
+        viewModelScope.launch {
+            prefs.saveAppLanguage(language)
+        }
+    }
+
     fun toggleAutoSync(enabled: Boolean) {
         viewModelScope.launch {
             prefs.setAutoSync(enabled)

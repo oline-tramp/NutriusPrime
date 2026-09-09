@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.kthealthsync.*
 import com.example.kthealthsync.domain.model.AddedFoodInfo
+import com.example.kthealthsync.domain.model.LocalAppStrings
 import com.example.kthealthsync.domain.model.NutrientGoals
 import com.example.kthealthsync.domain.util.NutrientUtils
 import com.example.kthealthsync.ui.search.SearchViewModel
@@ -56,18 +57,10 @@ fun AddFoodDialog(
     onDismiss: () -> Unit,
     onSuccess: (AddedFoodInfo) -> Unit
 ) {
+    val strings = LocalAppStrings.current
     val coroutineScope = rememberCoroutineScope()
 
-    val timeOptions = remember {
-        listOf(
-            "1" to "Breakfast (Snídaně)",
-            "2" to "Morning Snack (Dopolední svačina)",
-            "3" to "Lunch (Oběd)",
-            "4" to "Afternoon Snack (Odpolední svačina)",
-            "5" to "Dinner (Večeře)",
-            "6" to "Second Dinner (Druhá večeře)"
-        )
-    }
+    val timeOptions = remember(strings) { NutrientUtils.getStandardMealOptions(strings) }
 
     var unitOptions by remember { mutableStateOf<List<FoodFormUnitOption>>(emptyList()) }
     var selectedUnit by remember { mutableStateOf<FoodFormUnitOption?>(null) }
@@ -152,7 +145,7 @@ fun AddFoodDialog(
                         // Amount
                         Column(modifier = Modifier.weight(0.45f)) {
                             Text(
-                                "Amount",
+                                strings.amountLabel,
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
@@ -175,7 +168,7 @@ fun AddFoodDialog(
                         var unitExpanded by remember { mutableStateOf(false) }
                         Column(modifier = Modifier.weight(0.55f)) {
                             Text(
-                                "Unit",
+                                strings.unitLabel,
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
@@ -215,7 +208,7 @@ fun AddFoodDialog(
                     var mealExpanded by remember { mutableStateOf(false) }
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Text(
-                            "Meal Time",
+                            strings.mealTimeLabel,
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
@@ -267,13 +260,13 @@ fun AddFoodDialog(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            "Vliv na příjem",
+                            strings.nutritionImpactTitle,
                             style = MaterialTheme.typography.titleMedium,
                             color = Color.White
                         )
                         Icon(
                             imageVector = if (showImpactPreview) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                            contentDescription = if (showImpactPreview) "Skrýt" else "Zobrazit",
+                            contentDescription = null,
                             tint = Color.LightGray
                         )
                     }
@@ -281,19 +274,19 @@ fun AddFoodDialog(
                     if (showImpactPreview) {
                         Column(modifier = Modifier.fillMaxWidth()) {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                                CircularImpactIndicator(title = "Energie", current = currentKcal, added = addedKcal, max = nutrientGoals.kcal, unit = "kcal", color = Color(0xFFFFCA28))
-                                CircularImpactIndicator(title = "Bílkoviny", current = currentProtein, added = proteinPer100 * factor, max = nutrientGoals.protein, unit = "g", color = Color(0xFFEF5350))
-                                CircularImpactIndicator(title = "Sacharidy", current = currentCarbs, added = carbsPer100 * factor, max = nutrientGoals.carbs, unit = "g", color = Color(0xFFFFCA28))
+                                CircularImpactIndicator(title = strings.energy, current = currentKcal, added = addedKcal, max = nutrientGoals.kcal, unit = strings.kcalUnit, color = Color(0xFFFFCA28))
+                                CircularImpactIndicator(title = strings.protein, current = currentProtein, added = proteinPer100 * factor, max = nutrientGoals.protein, unit = "g", color = Color(0xFFEF5350))
+                                CircularImpactIndicator(title = strings.carbs, current = currentCarbs, added = carbsPer100 * factor, max = nutrientGoals.carbs, unit = "g", color = Color(0xFFFFCA28))
                             }
                             Spacer(modifier = Modifier.height(6.dp))
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                                CircularImpactIndicator(title = "Tuky", current = currentFat, added = fatPer100 * factor, max = nutrientGoals.fat, unit = "g", color = Color(0xFF66BB6A))
-                                CircularImpactIndicator(title = "Vláknina", current = currentFiber, added = fiberPer100 * factor, max = nutrientGoals.fiber, unit = "g", color = Color(0xFFFFCA28))
-                                CircularImpactIndicator(title = "Cukry", current = currentSugar, added = sugarPer100 * factor, max = nutrientGoals.sugar, unit = "g", color = Color(0xFF66BB6A))
+                                CircularImpactIndicator(title = strings.fat, current = currentFat, added = fatPer100 * factor, max = nutrientGoals.fat, unit = "g", color = Color(0xFF66BB6A))
+                                CircularImpactIndicator(title = strings.fiber.replace("🌾", "").trim(), current = currentFiber, added = fiberPer100 * factor, max = nutrientGoals.fiber, unit = "g", color = Color(0xFFFFCA28))
+                                CircularImpactIndicator(title = strings.sugar.replace("🍬", "").trim(), current = currentSugar, added = sugarPer100 * factor, max = nutrientGoals.sugar, unit = "g", color = Color(0xFF66BB6A))
                             }
                             Spacer(modifier = Modifier.height(6.dp))
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                                CircularImpactIndicator(title = "Sůl", current = currentSalt, added = saltPer100 * factor, max = nutrientGoals.salt, unit = "g", color = Color(0xFFEF5350))
+                                CircularImpactIndicator(title = strings.salt.replace("🧂", "").trim(), current = currentSalt, added = saltPer100 * factor, max = nutrientGoals.salt, unit = "g", color = Color(0xFFEF5350))
                                 Spacer(modifier = Modifier.width(88.dp))
                                 Spacer(modifier = Modifier.width(88.dp))
                             }
@@ -344,7 +337,7 @@ fun AddFoodDialog(
                                 errorMsg = response.message ?: "Failed with code ${response.code}"
                             }
                         } catch (e: Exception) {
-                            errorMsg = e.message ?: "Error saving food"
+                            errorMsg = e.message ?: strings.saveError
                         } finally {
                             isSubmitting = false
                         }
@@ -355,13 +348,13 @@ fun AddFoodDialog(
                 if (isSubmitting) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), color = MaterialTheme.colorScheme.onPrimary)
                 } else {
-                    Text("Save")
+                    Text(strings.save)
                 }
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss, enabled = !isSubmitting) {
-                Text("Cancel")
+                Text(strings.cancel)
             }
         }
     )

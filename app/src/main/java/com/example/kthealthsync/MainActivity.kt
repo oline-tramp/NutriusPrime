@@ -21,6 +21,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.health.connect.client.PermissionController
 import androidx.lifecycle.lifecycleScope
+import com.example.kthealthsync.domain.model.AppLanguage
+import com.example.kthealthsync.domain.model.LocalAppStrings
+import com.example.kthealthsync.domain.model.getAppStrings
 import com.example.kthealthsync.sync.HealthConnectManager
 import com.example.kthealthsync.ui.dashboard.DashboardScreen
 import com.example.kthealthsync.ui.dashboard.DashboardUiState
@@ -52,15 +55,19 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            MaterialTheme(
-                colorScheme = darkColorScheme(
-                    primary = Color(0xFF64FFDA),
-                    background = Color(0xFF121212),
-                    surface = Color(0xFF1E1E1E)
-                )
-            ) {
-                Surface(modifier = Modifier.fillMaxSize()) {
-                    var currentScreen by remember { mutableStateOf("dashboard") }
+            val currentLanguage by prefs.resolvedLanguageFlow.collectAsState(initial = AppLanguage.RU)
+            val appStrings = remember(currentLanguage) { getAppStrings(currentLanguage) }
+
+            CompositionLocalProvider(LocalAppStrings provides appStrings) {
+                MaterialTheme(
+                    colorScheme = darkColorScheme(
+                        primary = Color(0xFF64FFDA),
+                        background = Color(0xFF121212),
+                        surface = Color(0xFF1E1E1E)
+                    )
+                ) {
+                    Surface(modifier = Modifier.fillMaxSize()) {
+                        var currentScreen by remember { mutableStateOf("dashboard") }
                     var preselectedMealTimeGuid by remember { mutableStateOf<String?>(null) }
                     val selectedDate by dashboardViewModel.selectedDate.collectAsState()
                     val dashboardUiState by dashboardViewModel.uiState.collectAsState()
@@ -178,5 +185,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
     }
 }

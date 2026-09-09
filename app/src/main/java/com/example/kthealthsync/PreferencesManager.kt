@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.example.kthealthsync.domain.model.AppLanguage
 import com.example.kthealthsync.domain.model.NutrientGoals
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -23,6 +24,7 @@ class PreferencesManager(private val context: Context) {
         val SYNC_HOUR_KEY = intPreferencesKey("sync_hour")
         val SYNC_MINUTE_KEY = intPreferencesKey("sync_minute")
         val AUTO_SYNC_ENABLED_KEY = booleanPreferencesKey("auto_sync_enabled")
+        val APP_LANGUAGE_KEY = stringPreferencesKey("app_language")
 
         // Nutritional Goals Keys
         val GOAL_KCAL_KEY = doublePreferencesKey("goal_kcal")
@@ -63,6 +65,17 @@ class PreferencesManager(private val context: Context) {
     val syncHourFlow: Flow<Int> = context.dataStore.data.map { it[SYNC_HOUR_KEY] ?: 6 }
     val syncMinuteFlow: Flow<Int> = context.dataStore.data.map { it[SYNC_MINUTE_KEY] ?: 0 }
     val autoSyncEnabledFlow: Flow<Boolean> = context.dataStore.data.map { it[AUTO_SYNC_ENABLED_KEY] ?: false }
+    val appLanguageFlow: Flow<AppLanguage> = context.dataStore.data.map { prefs ->
+        AppLanguage.fromCode(prefs[APP_LANGUAGE_KEY])
+    }
+    val resolvedLanguageFlow: Flow<AppLanguage> = context.dataStore.data.map { prefs ->
+        val userChoice = AppLanguage.fromCode(prefs[APP_LANGUAGE_KEY])
+        if (userChoice == AppLanguage.AUTO) {
+            AppLanguage.resolveAppLanguage(prefs[COOKIE_KEY])
+        } else {
+            userChoice
+        }
+    }
 
     val nutrientGoalsFlow: Flow<NutrientGoals> = context.dataStore.data.map { prefs ->
         val defaults = NutrientGoals()
@@ -99,6 +112,10 @@ class PreferencesManager(private val context: Context) {
 
     suspend fun setAutoSync(enabled: Boolean) {
         context.dataStore.edit { it[AUTO_SYNC_ENABLED_KEY] = enabled }
+    }
+
+    suspend fun saveAppLanguage(language: AppLanguage) {
+        context.dataStore.edit { it[APP_LANGUAGE_KEY] = language.code }
     }
 
     suspend fun saveNutrientGoals(goals: NutrientGoals) {

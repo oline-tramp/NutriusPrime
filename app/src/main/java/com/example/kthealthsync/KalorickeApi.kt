@@ -174,7 +174,7 @@ interface KalorickeApiService {
         @Header("Cookie") cookie: String,
         @Header("User-Agent") userAgent: String = "Mozilla/5.0 (Linux; Android 14; Pixel 7 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
         @Header("Accept") accept: String = "application/json, text/plain, */*",
-        @Header("Accept-Language") acceptLanguage: String = "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
+        @Header("Accept-Language") acceptLanguage: String? = null,
         @Header("Accept-Encoding") acceptEncoding: String = "identity"
     ): DiaryResponse
 
