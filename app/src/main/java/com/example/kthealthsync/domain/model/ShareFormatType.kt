@@ -5,6 +5,11 @@ enum class ShareFormatType(
     val subtitle: String,
     val icon: String
 ) {
+    WHOOP_BEHAVIORS_LLM(
+        title = "Журнал Whoop (ИИ)",
+        subtitle = "Промпт для Whoop AI Coach: макросы, привычки, суплементы и Yes/No",
+        icon = "⚡"
+    ),
     HOW_TO_HIT_GOALS_LLM(
         title = "Как добить до нормы (ИИ)",
         subtitle = "Промпт для нутрициолога: что доесть для закрытия дефицитов",
