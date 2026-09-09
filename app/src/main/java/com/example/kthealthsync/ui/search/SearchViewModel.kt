@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.kthealthsync.*
 import com.example.kthealthsync.data.repository.KalorickeRepository
 import com.example.kthealthsync.domain.model.NutrientGoals
+import com.example.kthealthsync.domain.util.OpenFoodFactsHelper
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -177,21 +178,52 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
 
         searchJob = viewModelScope.launch {
             delay(400)
-            _isSearching.value = true
-            _errorMessage.value = null
-            currentPage = 0
-            _canLoadMore.value = true
-            try {
-                val matches = repository.searchFood(newQuery, _myMeals.value, page = 0)
-                _results.value = matches
-                if (matches.size < 10) {
-                    _canLoadMore.value = false
+            performSearch(newQuery)
+        }
+    }
+
+    fun searchBarcode(barcode: String, onSingleMatchFound: ((AutocompleteResponseItem) -> Unit)? = null) {
+        val cleanBarcode = barcode.trim()
+        _query.value = cleanBarcode
+        searchJob?.cancel()
+
+        searchJob = viewModelScope.launch {
+            performSearch(cleanBarcode, onSingleMatchFound)
+        }
+    }
+
+    private suspend fun performSearch(
+        queryStr: String,
+        onSingleMatchFound: ((AutocompleteResponseItem) -> Unit)? = null
+    ) {
+        _isSearching.value = true
+        _errorMessage.value = null
+        currentPage = 0
+        _canLoadMore.value = true
+        try {
+            var matches = repository.searchFood(queryStr, _myMeals.value, page = 0)
+            val isBarcode = queryStr.all { it.isDigit() } && queryStr.length in 8..14
+
+            if (matches.isEmpty() && isBarcode) {
+                // Try Open Food Facts fallback to resolve barcode to product name
+                val offName = OpenFoodFactsHelper.lookupProductName(queryStr)
+                if (!offName.isNullOrBlank()) {
+                    matches = repository.searchFood(offName, _myMeals.value, page = 0)
                 }
-            } catch (e: Exception) {
-                _errorMessage.value = e.message ?: "Search failed"
-            } finally {
-                _isSearching.value = false
             }
+
+            _results.value = matches
+            if (matches.size < 10) {
+                _canLoadMore.value = false
+            }
+
+            if (matches.size == 1 && onSingleMatchFound != null) {
+                onSingleMatchFound(matches.first())
+            }
+        } catch (e: Exception) {
+            _errorMessage.value = e.message ?: "Search failed"
+        } finally {
+            _isSearching.value = false
         }
     }
 

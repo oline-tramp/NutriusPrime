@@ -28,12 +28,16 @@ import com.example.kthealthsync.AutocompleteResponseItem
 import com.example.kthealthsync.domain.model.AddedFoodInfo
 import com.example.kthealthsync.domain.model.LocalAppStrings
 import com.example.kthealthsync.ui.search.components.AddFoodDialog
+import androidx.compose.material.icons.filled.QrCodeScanner
+import com.example.kthealthsync.domain.util.BarcodeScannerHelper
+import androidx.compose.ui.platform.LocalContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchScreen(
     date: String,
     preselectedMealTimeGuid: String? = null,
+    initialBarcode: String? = null,
     currentKcal: Double,
     currentProtein: Double,
     currentCarbs: Double,
@@ -45,6 +49,7 @@ fun SearchScreen(
     onBack: () -> Unit,
     onFoodAdded: (AddedFoodInfo) -> Unit
 ) {
+    val context = LocalContext.current
     val strings = LocalAppStrings.current
     val query by viewModel.query.collectAsState()
     val results by viewModel.results.collectAsState()
@@ -63,12 +68,23 @@ fun SearchScreen(
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
 
+    LaunchedEffect(initialBarcode) {
+        if (!initialBarcode.isNullOrBlank()) {
+            viewModel.searchBarcode(initialBarcode) { item ->
+                selectedItem = item
+                showAddDialog = true
+            }
+        }
+    }
+
     LaunchedEffect(Unit) {
-        kotlinx.coroutines.delay(100)
-        try {
-            focusRequester.requestFocus()
-            keyboardController?.show()
-        } catch (_: Exception) {}
+        if (initialBarcode.isNullOrBlank()) {
+            kotlinx.coroutines.delay(100)
+            try {
+                focusRequester.requestFocus()
+                keyboardController?.show()
+            } catch (_: Exception) {}
+        }
     }
 
     val isLoadingMore by viewModel.isLoadingMore.collectAsState()
@@ -131,9 +147,28 @@ fun SearchScreen(
                     .focusRequester(focusRequester),
                 singleLine = true,
                 trailingIcon = {
-                    if (query.isNotEmpty()) {
-                        IconButton(onClick = { viewModel.clearSearch() }) {
-                            Icon(Icons.Default.Clear, contentDescription = strings.clear)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = {
+                            BarcodeScannerHelper.scanBarcode(
+                                context = context,
+                                onSuccess = { barcode ->
+                                    viewModel.searchBarcode(barcode) { item ->
+                                        selectedItem = item
+                                        showAddDialog = true
+                                    }
+                                }
+                            )
+                        }) {
+                            Icon(
+                                Icons.Default.QrCodeScanner,
+                                contentDescription = strings.scanBarcode,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        if (query.isNotEmpty()) {
+                            IconButton(onClick = { viewModel.clearSearch() }) {
+                                Icon(Icons.Default.Clear, contentDescription = strings.clear)
+                            }
                         }
                     }
                 }

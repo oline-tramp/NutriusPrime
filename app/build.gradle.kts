@@ -11,8 +11,8 @@ android {
         applicationId = "com.example.kthealthsync"
         minSdk = 26
         targetSdk = 34
-        versionCode = 28
-        versionName = "2.17"
+        versionCode = 29
+        versionName = "2.18"
     }
 
     buildTypes {
@@ -64,6 +64,9 @@ dependencies {
 
     // WorkManager
     implementation("androidx.work:work-runtime-ktx:2.9.0")
+
+    // Barcode Scanner (Google Play services code scanner)
+    implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
     
     // Testing
     testImplementation("junit:junit:4.13.2")

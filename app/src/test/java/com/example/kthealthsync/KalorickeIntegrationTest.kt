@@ -211,4 +211,48 @@ class KalorickeIntegrationTest {
             }
         }
     }
+
+    @Test
+    fun testBarcodeSearch() = runBlocking {
+        val api = RetrofitClient.instance
+        val testBarcodes = listOf(
+            "8000500179864", // Nutella
+            "5449000000996"  // Coca-Cola
+        )
+        val client = okhttp3.OkHttpClient()
+        for (barcode in testBarcodes) {
+            try {
+                val results = api.searchFood(barcode, 0, cookie)
+                println("KT Barcode $barcode search result count: ${results.size}")
+                results.forEach { item ->
+                    println("  -> KT found: id=${item.id}, title=${item.title}, unit=${item.unit}")
+                }
+                if (results.isEmpty()) {
+                    // Try Open Food Facts
+                    val req = okhttp3.Request.Builder()
+                        .url("https://world.openfoodfacts.org/api/v0/product/$barcode.json")
+                        .header("User-Agent", "NutriusPrime - Android")
+                        .build()
+                    val resp = client.newCall(req).execute()
+                    val body = resp.body?.string() ?: ""
+                    println("  -> OFF HTTP ${resp.code}, contains 'product_name': ${body.contains("product_name")}")
+                    if (body.contains("\"product_name\"")) {
+                        val nameRegex = Regex(""""product_name(?:_[a-z]+)?":\s*"([^"]+)"""")
+                        val match = nameRegex.find(body)
+                        val name = match?.groupValues?.get(1)
+                        println("  -> OFF product_name: $name")
+                        if (!name.isNullOrBlank()) {
+                            val ktResults = api.searchFood(name, 0, cookie)
+                            println("  -> Searching KT by OFF name '$name': count=${ktResults.size}")
+                            ktResults.take(3).forEach {
+                                println("     -> KT match: ${it.title} (${it.id})")
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                println("Barcode $barcode search error: ${e.message}")
+            }
+        }
+    }
 }

@@ -49,6 +49,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
@@ -88,7 +89,8 @@ fun DashboardScreen(
     viewModel: DashboardViewModel,
     onSettingsClick: () -> Unit,
     onDebugClick: () -> Unit,
-    onAddFoodClick: (mealTimeGuid: String?) -> Unit
+    onAddFoodClick: (mealTimeGuid: String?) -> Unit,
+    onScanBarcodeClick: (mealTimeGuid: String?) -> Unit = {}
 ) {
     val strings = LocalAppStrings.current
     val context = LocalContext.current
@@ -533,6 +535,7 @@ fun DashboardScreen(
                                 selectedEntryIds = if (selectedEntryIds.contains(id)) selectedEntryIds - id else selectedEntryIds + id
                             },
                             onAddFoodClick = onAddFoodClick,
+                            onScanBarcodeClick = onScanBarcodeClick,
                             onSingleMove = { id ->
                                 singleMoveTargetId = id
                                 showMoveDialog = true
@@ -1135,6 +1138,7 @@ fun DailyDiarySpoiler(
     dateStr: String = "",
     onToggleSelect: (String) -> Unit,
     onAddFoodClick: (mealTimeGuid: String?) -> Unit,
+    onScanBarcodeClick: (mealTimeGuid: String?) -> Unit = {},
     onSingleMove: (String) -> Unit,
     onSingleClone: (Foodstuff) -> Unit,
     onSingleDelete: (String) -> Unit,
@@ -1241,31 +1245,39 @@ fun DailyDiarySpoiler(
                         }
                     }
 
-                    // Add button on the spoiler header
-                    Button(
+                    // Barcode Scanner button
+                    IconButton(
+                        onClick = { onScanBarcodeClick(null) },
+                        modifier = Modifier
+                            .size(34.dp)
+                            .background(Color(0xFF2A2A2A), RoundedCornerShape(8.dp))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.QrCodeScanner,
+                            contentDescription = strings.scanBarcode,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(6.dp))
+
+                    // Add button on the spoiler header (compact icon button)
+                    IconButton(
                         onClick = { onAddFoodClick(null) },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = Color.Black
-                        ),
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                        modifier = Modifier.height(34.dp)
+                        modifier = Modifier
+                            .size(34.dp)
+                            .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
                     ) {
                         Icon(
                             imageVector = Icons.Default.Add,
                             contentDescription = strings.add,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = strings.add,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
+                            tint = Color.Black,
+                            modifier = Modifier.size(18.dp)
                         )
                     }
 
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
 
                     IconButton(
                         onClick = { isDiaryExpanded = !isDiaryExpanded },
@@ -1353,6 +1365,9 @@ fun DailyDiarySpoiler(
                                     onToggleSelect = onToggleSelect,
                                     onAddFoodClick = {
                                         onAddFoodClick(mealTime.id)
+                                    },
+                                    onScanBarcodeClick = {
+                                        onScanBarcodeClick(mealTime.id)
                                     },
                                     onSingleMove = onSingleMove,
                                     onSingleClone = onSingleClone,
@@ -1475,6 +1490,7 @@ fun MealTimeGroup(
     dateStr: String = "",
     onToggleSelect: (String) -> Unit,
     onAddFoodClick: () -> Unit,
+    onScanBarcodeClick: () -> Unit = {},
     onSingleMove: (String) -> Unit,
     onSingleClone: (Foodstuff) -> Unit,
     onSingleDelete: (String) -> Unit,
@@ -1554,6 +1570,21 @@ fun MealTimeGroup(
                         )
                     }
                 }
+
+                // Per-meal Scanner Button
+                IconButton(
+                    onClick = onScanBarcodeClick,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.QrCodeScanner,
+                        contentDescription = "${strings.scanBarcode} $mealDisplayName",
+                        tint = Color(0xFFAAAAAA),
+                        modifier = Modifier.size(17.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(2.dp))
 
                 // Per-meal Add Button
                 IconButton(

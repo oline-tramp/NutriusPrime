@@ -66,75 +66,95 @@ class MainActivity : ComponentActivity() {
                         surface = Color(0xFF1E1E1E)
                     )
                 ) {
+                    val context = androidx.compose.ui.platform.LocalContext.current
                     Surface(modifier = Modifier.fillMaxSize()) {
                         var currentScreen by remember { mutableStateOf("dashboard") }
-                    var preselectedMealTimeGuid by remember { mutableStateOf<String?>(null) }
-                    val selectedDate by dashboardViewModel.selectedDate.collectAsState()
-                    val dashboardUiState by dashboardViewModel.uiState.collectAsState()
+                        var preselectedMealTimeGuid by remember { mutableStateOf<String?>(null) }
+                        var initialSearchBarcode by remember { mutableStateOf<String?>(null) }
+                        val selectedDate by dashboardViewModel.selectedDate.collectAsState()
+                        val dashboardUiState by dashboardViewModel.uiState.collectAsState()
 
-                    BackHandler(enabled = currentScreen != "dashboard") {
-                        when (currentScreen) {
-                            "login" -> currentScreen = "settings"
-                            "search" -> {
-                                preselectedMealTimeGuid = null
-                                currentScreen = "dashboard"
-                            }
-                            else -> currentScreen = "dashboard"
-                        }
-                    }
-
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        // Dashboard remains continuously mounted to preserve scroll position and spoiler states
-                        DashboardScreen(
-                            viewModel = dashboardViewModel,
-                            onSettingsClick = { currentScreen = "settings" },
-                            onDebugClick = { currentScreen = "debug" },
-                            onAddFoodClick = { mealTimeGuid ->
-                                preselectedMealTimeGuid = mealTimeGuid
-                                currentScreen = "search"
-                            }
-                        )
-
-                        AnimatedVisibility(
-                            visible = currentScreen == "search",
-                            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-                            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
-                        ) {
-                            val formattedDate = selectedDate.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
-                            val summary = (dashboardUiState as? DashboardUiState.Success)?.summary
-                            SearchScreen(
-                                date = formattedDate,
-                                preselectedMealTimeGuid = preselectedMealTimeGuid,
-                                currentKcal = summary?.kcal ?: 0.0,
-                                currentProtein = summary?.protein ?: 0.0,
-                                currentCarbs = summary?.carb ?: 0.0,
-                                currentFat = summary?.fat ?: 0.0,
-                                currentFiber = summary?.fiber ?: 0.0,
-                                currentSugar = summary?.sugar ?: 0.0,
-                                currentSalt = summary?.salt ?: 0.0,
-                                onBack = {
+                        BackHandler(enabled = currentScreen != "dashboard") {
+                            when (currentScreen) {
+                                "login" -> currentScreen = "settings"
+                                "search" -> {
                                     preselectedMealTimeGuid = null
-                                    currentScreen = "dashboard"
-                                },
-                                onFoodAdded = { addedInfo ->
-                                    preselectedMealTimeGuid = null
-                                    dashboardViewModel.addEntryOptimistic(
-                                        title = addedInfo.title,
-                                        kcal = addedInfo.kcal,
-                                        protein = addedInfo.protein,
-                                        carbs = addedInfo.carbs,
-                                        fat = addedInfo.fat,
-                                        fiber = addedInfo.fiber,
-                                        sugar = addedInfo.sugar,
-                                        salt = addedInfo.salt,
-                                        unitStr = addedInfo.unitStr,
-                                        mealTimeId = addedInfo.mealTimeId
-                                    )
-                                    dashboardViewModel.refresh(silent = true)
+                                    initialSearchBarcode = null
                                     currentScreen = "dashboard"
                                 }
-                            )
+                                else -> currentScreen = "dashboard"
+                            }
                         }
+
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            // Dashboard remains continuously mounted to preserve scroll position and spoiler states
+                            DashboardScreen(
+                                viewModel = dashboardViewModel,
+                                onSettingsClick = { currentScreen = "settings" },
+                                onDebugClick = { currentScreen = "debug" },
+                                onAddFoodClick = { mealTimeGuid ->
+                                    preselectedMealTimeGuid = mealTimeGuid
+                                    initialSearchBarcode = null
+                                    currentScreen = "search"
+                                },
+                                onScanBarcodeClick = { mealTimeGuid ->
+                                    com.example.kthealthsync.domain.util.BarcodeScannerHelper.scanBarcode(
+                                        context = context,
+                                        onSuccess = { barcode ->
+                                            preselectedMealTimeGuid = mealTimeGuid
+                                            initialSearchBarcode = barcode
+                                            currentScreen = "search"
+                                        },
+                                        onFailure = { e ->
+                                            Toast.makeText(context, "${appStrings.scanError}: ${e.message}", Toast.LENGTH_SHORT).show()
+                                        }
+                                    )
+                                }
+                            )
+
+                            AnimatedVisibility(
+                                visible = currentScreen == "search",
+                                enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+                            ) {
+                                val formattedDate = selectedDate.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+                                val summary = (dashboardUiState as? DashboardUiState.Success)?.summary
+                                SearchScreen(
+                                    date = formattedDate,
+                                    preselectedMealTimeGuid = preselectedMealTimeGuid,
+                                    initialBarcode = initialSearchBarcode,
+                                    currentKcal = summary?.kcal ?: 0.0,
+                                    currentProtein = summary?.protein ?: 0.0,
+                                    currentCarbs = summary?.carb ?: 0.0,
+                                    currentFat = summary?.fat ?: 0.0,
+                                    currentFiber = summary?.fiber ?: 0.0,
+                                    currentSugar = summary?.sugar ?: 0.0,
+                                    currentSalt = summary?.salt ?: 0.0,
+                                    onBack = {
+                                        preselectedMealTimeGuid = null
+                                        initialSearchBarcode = null
+                                        currentScreen = "dashboard"
+                                    },
+                                    onFoodAdded = { addedInfo ->
+                                        preselectedMealTimeGuid = null
+                                        initialSearchBarcode = null
+                                        dashboardViewModel.addEntryOptimistic(
+                                            title = addedInfo.title,
+                                            kcal = addedInfo.kcal,
+                                            protein = addedInfo.protein,
+                                            carbs = addedInfo.carbs,
+                                            fat = addedInfo.fat,
+                                            fiber = addedInfo.fiber,
+                                            sugar = addedInfo.sugar,
+                                            salt = addedInfo.salt,
+                                            unitStr = addedInfo.unitStr,
+                                            mealTimeId = addedInfo.mealTimeId
+                                        )
+                                        dashboardViewModel.refresh(silent = true)
+                                        currentScreen = "dashboard"
+                                    }
+                                )
+                            }
 
                         AnimatedVisibility(
                             visible = currentScreen == "settings",

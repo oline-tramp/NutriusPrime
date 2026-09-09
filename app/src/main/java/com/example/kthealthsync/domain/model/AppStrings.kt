@@ -92,8 +92,11 @@ data class AppStrings(
     val saveError: String,
     val sessionExpired: String,
 
-    // Search
+    // Search & Barcode
     val searchPlaceholder: String,
+    val scanBarcode: String,
+    val barcodeNotFound: String,
+    val scanError: String,
     val recentSearches: String,
     val frequentTab: String,
     val favoritesTab: String,
@@ -208,6 +211,9 @@ val RuStrings = AppStrings(
     sessionExpired = "Сессия истекла. Пожалуйста, войдите снова в Настройках.",
 
     searchPlaceholder = "Поиск продуктов...",
+    scanBarcode = "Сканировать штрихкод",
+    barcodeNotFound = "Товар с кодом %s не найден",
+    scanError = "Ошибка сканирования штрихкода",
     recentSearches = "Недавние поиски",
     frequentTab = "Частые",
     favoritesTab = "Избранное",
@@ -319,6 +325,9 @@ val CsStrings = AppStrings(
     sessionExpired = "Platnost relace vypršela. Přihlaste se prosím znovu v Nastavení.",
 
     searchPlaceholder = "Hledat potraviny...",
+    scanBarcode = "Naskenovat čárový kód",
+    barcodeNotFound = "Položka s kódem %s nebyla nalezena",
+    scanError = "Chyba při skenování kódu",
     recentSearches = "Nedávná hledání",
     frequentTab = "Časté",
     favoritesTab = "Oblíbené",
@@ -430,6 +439,9 @@ val EnStrings = AppStrings(
     sessionExpired = "Session expired. Please log in again in Settings.",
 
     searchPlaceholder = "Search food...",
+    scanBarcode = "Scan barcode",
+    barcodeNotFound = "Product with barcode %s not found",
+    scanError = "Barcode scanning error",
     recentSearches = "Recent searches",
     frequentTab = "Frequent",
     favoritesTab = "Favorites",
