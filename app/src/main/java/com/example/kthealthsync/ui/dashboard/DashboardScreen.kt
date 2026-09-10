@@ -177,6 +177,27 @@ fun DashboardScreen(
             )
         }
     ) { padding ->
+        var selectedEntryIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+        var showMoveDialog by remember { mutableStateOf(false) }
+        var showDeleteDialog by remember { mutableStateOf(false) }
+        var singleMoveTargetId by remember { mutableStateOf<String?>(null) }
+        var singleDeleteTargetId by remember { mutableStateOf<String?>(null) }
+        var showCloneDialog by remember { mutableStateOf(false) }
+        var singleCloneTargetFood by remember { mutableStateOf<Foodstuff?>(null) }
+        var showEditDialog by remember { mutableStateOf(false) }
+        var editTarget by remember { mutableStateOf<Pair<Foodstuff, String>?>(null) }
+
+        val allValidFoods = remember(uiState) {
+            (uiState as? DashboardUiState.Success)?.diaryResponse?.data?.times
+                ?.flatMap { it.foodstuff ?: emptyList() } ?: emptyList()
+        }
+        val allValidIds = remember(allValidFoods) {
+            allValidFoods.mapNotNull { it.id }.toSet()
+        }
+        LaunchedEffect(allValidIds) {
+            selectedEntryIds = selectedEntryIds.intersect(allValidIds)
+        }
+
         showPopupFor?.let { (title, breakdownList) ->
             AlertDialog(
                 onDismissRequest = { showPopupFor = null },
@@ -185,7 +206,23 @@ fun DashboardScreen(
                     LazyColumn(modifier = Modifier.fillMaxWidth()) {
                         val total = breakdownList.sumOf { it.amount }
                         items(breakdownList) { item ->
-                            RecursiveBreakdownItem(item, title, total, 0)
+                            RecursiveBreakdownItem(
+                                item = item,
+                                title = title,
+                                grandTotal = total,
+                                depth = 0,
+                                onAddFood = { breakdown ->
+                                    val food = breakdown.originalFood ?: allValidFoods.find { f ->
+                                        (f.name != null && f.name.equals(breakdown.name, ignoreCase = true)) ||
+                                        (f.title != null && f.title.equals(breakdown.name, ignoreCase = true))
+                                    } ?: Foodstuff(
+                                        name = breakdown.name,
+                                        title = breakdown.name
+                                    )
+                                    singleCloneTargetFood = food
+                                    showCloneDialog = true
+                                }
+                            )
                         }
                     }
                 },
@@ -225,27 +262,6 @@ fun DashboardScreen(
                     }
                 )
             }
-        }
-
-        var selectedEntryIds by remember { mutableStateOf<Set<String>>(emptySet()) }
-        var showMoveDialog by remember { mutableStateOf(false) }
-        var showDeleteDialog by remember { mutableStateOf(false) }
-        var singleMoveTargetId by remember { mutableStateOf<String?>(null) }
-        var singleDeleteTargetId by remember { mutableStateOf<String?>(null) }
-        var showCloneDialog by remember { mutableStateOf(false) }
-        var singleCloneTargetFood by remember { mutableStateOf<Foodstuff?>(null) }
-        var showEditDialog by remember { mutableStateOf(false) }
-        var editTarget by remember { mutableStateOf<Pair<Foodstuff, String>?>(null) }
-
-        val allValidFoods = remember(uiState) {
-            (uiState as? DashboardUiState.Success)?.diaryResponse?.data?.times
-                ?.flatMap { it.foodstuff ?: emptyList() } ?: emptyList()
-        }
-        val allValidIds = remember(allValidFoods) {
-            allValidFoods.mapNotNull { it.id }.toSet()
-        }
-        LaunchedEffect(allValidIds) {
-            selectedEntryIds = selectedEntryIds.intersect(allValidIds)
         }
 
         Box(
@@ -733,7 +749,14 @@ fun DashboardScreen(
             if (targetFoods.size == 1) {
                 val food = targetFoods.first()
                 val currentMealId = (uiState as? DashboardUiState.Success)?.diaryResponse?.data?.times?.find { time ->
-                    time.foodstuff?.any { it.id == food.id } == true
+                    time.foodstuff?.any {
+                        (it.id != null && it.id == food.id) ||
+                        (it.guid != null && it.guid == food.guid) ||
+                        (it.guidRecipe != null && it.guidRecipe == food.guidRecipe) ||
+                        (it.guidType != null && it.guidType == food.guidType) ||
+                        (it.name != null && it.name.equals(food.name, ignoreCase = true)) ||
+                        (it.title != null && it.title.equals(food.title, ignoreCase = true))
+                    } == true
                 }?.id ?: "1"
 
                 EditFoodDialog(
@@ -751,6 +774,7 @@ fun DashboardScreen(
                         showCloneDialog = false
                         singleCloneTargetFood = null
                         selectedEntryIds = emptySet()
+                        showPopupFor = null
                     }
                 )
             } else if (targetFoods.size > 1) {
@@ -1003,7 +1027,13 @@ fun MicroItem(
 }
 
 @Composable
-fun RecursiveBreakdownItem(item: FoodBreakdown, title: String, grandTotal: Double, depth: Int = 0) {
+fun RecursiveBreakdownItem(
+    item: FoodBreakdown,
+    title: String,
+    grandTotal: Double,
+    depth: Int = 0,
+    onAddFood: ((FoodBreakdown) -> Unit)? = null
+) {
     var expanded by remember { mutableStateOf(false) }
     val pct = if (grandTotal > 0) (item.amount / grandTotal) * 100 else 0.0
     val isSupp = title.contains("Supplements") || title.contains("Supps")
@@ -1014,12 +1044,12 @@ fun RecursiveBreakdownItem(item: FoodBreakdown, title: String, grandTotal: Doubl
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 8.dp)
+                .padding(vertical = 4.dp)
                 .then(if (hasChildren) Modifier.clickable { expanded = !expanded } else Modifier),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(modifier = Modifier.weight(1f).padding(end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(modifier = Modifier.weight(1f).padding(end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (hasChildren) {
                     Icon(
                         imageVector = if (expanded) Icons.Default.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
@@ -1031,15 +1061,32 @@ fun RecursiveBreakdownItem(item: FoodBreakdown, title: String, grandTotal: Doubl
                 }
                 Text(item.name, maxLines = 2, overflow = TextOverflow.Ellipsis, fontSize = 14.sp)
             }
-            Column(horizontalAlignment = Alignment.End) {
-                val amountStr = if (isSupp) "${item.amount.toInt()} $unitStr" else "${String.format(Locale.US, "%.1f", item.amount)} $unitStr"
-                Text(amountStr, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                Text("${String.format(Locale.US, "%.1f", pct)}%", fontSize = 12.sp, color = Color.Gray)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(horizontalAlignment = Alignment.End) {
+                    val amountStr = if (isSupp) "${item.amount.toInt()} $unitStr" else "${String.format(Locale.US, "%.1f", item.amount)} $unitStr"
+                    Text(amountStr, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text("${String.format(Locale.US, "%.1f", pct)}%", fontSize = 12.sp, color = Color.Gray)
+                }
+                if (onAddFood != null) {
+                    IconButton(
+                        onClick = { onAddFood(item) },
+                        modifier = Modifier
+                            .padding(start = 2.dp)
+                            .size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Add",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
             }
         }
         if (expanded && hasChildren) {
             item.components.forEach { child ->
-                RecursiveBreakdownItem(child, title, grandTotal, depth + 1)
+                RecursiveBreakdownItem(child, title, grandTotal, depth + 1, onAddFood)
             }
         }
     }

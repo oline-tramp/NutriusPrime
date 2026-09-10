@@ -390,16 +390,16 @@ object NutrientUtils {
             if (isRecipe && withMeals) {
                 val childBreakdowns = children?.let { aggregateMacro(it, extractor, false) } ?: emptyList()
                 if (value > 0 || childBreakdowns.isNotEmpty()) {
-                    result.add(FoodBreakdown(fname, value, childBreakdowns))
+                    result.add(FoodBreakdown(fname, value, childBreakdowns, originalFood = f))
                 }
             } else if (isRecipe && !withMeals) {
                 if (!children.isNullOrEmpty()) {
                     result.addAll(aggregateMacro(children, extractor, false))
                 } else {
-                    if (value > 0) result.add(FoodBreakdown(fname, value))
+                    if (value > 0) result.add(FoodBreakdown(fname, value, originalFood = f))
                 }
             } else {
-                if (value > 0) result.add(FoodBreakdown(fname, value))
+                if (value > 0) result.add(FoodBreakdown(fname, value, originalFood = f))
             }
         }
         return mergeBreakdowns(result)
@@ -413,7 +413,8 @@ object NutrientUtils {
             val totalAmount = items.sumOf { it.amount }.takeIf { it > 0 } ?: items.firstOrNull()?.amount ?: 0.0
             val allComponents = items.flatMap { it.components }
             val mergedComponents = if (allComponents.isNotEmpty()) mergeBreakdowns(allComponents) else emptyList()
-            FoodBreakdown(name, totalAmount, mergedComponents)
+            val origFood = items.mapNotNull { it.originalFood }.firstOrNull()
+            FoodBreakdown(name, totalAmount, mergedComponents, origFood)
         }.sortedByDescending { it.amount }
     }
 

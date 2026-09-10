@@ -141,7 +141,7 @@ fun EditFoodDialog(
         mutableDoubleStateOf(NutrientUtils.parseNutrient(food.salt) / portionGrams * 100.0)
     }
 
-    val productGuid = food.guidType ?: food.guid ?: ""
+    val productGuid = food.guidType ?: food.guid ?: food.guidRecipe ?: ""
 
     LaunchedEffect(productGuid) {
         if (productGuid.isNotBlank()) {
@@ -443,7 +443,11 @@ fun EditFoodDialog(
                         errorMsg = strings.invalidAmountError
                         return@Button
                     }
-                    if (food.id.isNullOrBlank()) {
+                    if (!isClone && food.id.isNullOrBlank()) {
+                        errorMsg = strings.idNotFoundError
+                        return@Button
+                    }
+                    if (productGuid.isBlank()) {
                         errorMsg = strings.idNotFoundError
                         return@Button
                     }
@@ -485,7 +489,7 @@ fun EditFoodDialog(
                             }
                         } else {
                             viewModel.editFoodEntry(
-                                oldEntryId = food.id,
+                                oldEntryId = food.id ?: "",
                                 request = request
                             ) { success ->
                                 isSubmitting = false
