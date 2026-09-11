@@ -210,7 +210,7 @@ fun EditFoodDialog(
         title = {
             Column {
                 Text(
-                    text = if (isClone) "📋 ${strings.cloneAction}" else "✏️ ${strings.editTitle}",
+                    text = if (isClone) strings.cloneTitle else strings.editTitle,
                     fontSize = 13.sp,
                     color = if (isClone) Color(0xFF81C784) else MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.SemiBold
