@@ -176,10 +176,13 @@ fun SearchScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            if (errorMessage != null) {
+                Text(errorMessage!!, color = MaterialTheme.colorScheme.error)
+                TextButton(onClick = { viewModel.retry() }) { Text(strings.retry) }
+            }
+
             if (isSearching || (isFetchingDefaults && query.length < 3)) {
                 CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
-            } else if (errorMessage != null) {
-                Text(errorMessage!!, color = MaterialTheme.colorScheme.error)
             } else {
                 val listToShow = if (query.length >= 3) {
                     results
@@ -204,7 +207,7 @@ fun SearchScreen(
                         HorizontalDivider()
                     }
 
-                    val showMoreSearch = query.length >= 3 && canLoadMore
+                    val showMoreSearch = query.length >= 3 && canLoadMore && results.isNotEmpty()
                     val showMoreFrequent = query.length < 3 && selectedTab == 0 && canLoadMoreFrequent
                     val showMoreFavorite = query.length < 3 && selectedTab == 1 && canLoadMoreFavorites
                     val isCurrentlyLoading = when {

@@ -1,63 +1,46 @@
 package com.example.kthealthsync
 
+import okhttp3.Headers
 import okhttp3.Interceptor
 import okhttp3.Response
-import okhttp3.ResponseBody
 
 class LoggingInterceptor : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
-        val url = request.url.toString()
-        val method = request.method
-        val requestHeaders = request.headers.toString()
-
-        var responseCode = 0
-        var responseHeaders = ""
-        var responseBodyString = ""
-
+        val requestHeaders = safeHeaders(request.headers)
         try {
             val response = chain.proceed(request)
-            responseCode = response.code
-            responseHeaders = response.headers.toString()
-            
-            val body = response.body
-            if (body != null) {
-                responseBodyString = body.string()
-                
-                // Log it
-                DebugLogger.addNetworkLog(
-                    method = method,
-                    url = url,
-                    requestHeaders = requestHeaders,
-                    responseCode = responseCode,
-                    responseHeaders = responseHeaders,
-                    responseBody = responseBodyString.take(1000) // Log max 1000 chars of body
-                )
-
-                // Re-create the response because body string() consumes it
-                val newBody = ResponseBody.create(body.contentType(), responseBodyString)
-                return response.newBuilder().body(newBody).build()
-            } else {
-                DebugLogger.addNetworkLog(
-                    method = method,
-                    url = url,
-                    requestHeaders = requestHeaders,
-                    responseCode = responseCode,
-                    responseHeaders = responseHeaders,
-                    responseBody = "null body"
-                )
-                return response
-            }
+            DebugLogger.addNetworkLog(
+                method = request.method,
+                url = request.url.toString(),
+                requestHeaders = requestHeaders,
+                responseCode = response.code,
+                responseHeaders = safeHeaders(response.headers),
+                responseBody = response.peekBody(1000).string()
+            )
+            return response
         } catch (e: Exception) {
             DebugLogger.addNetworkLog(
-                method = method,
-                url = url,
+                method = request.method,
+                url = request.url.toString(),
                 requestHeaders = requestHeaders,
                 responseCode = -1,
                 responseHeaders = "",
                 responseBody = "Exception: ${e.message}"
             )
             throw e
+        }
+    }
+
+    private fun safeHeaders(headers: Headers): String = buildString {
+        // Only diagnostics headers are useful here. Never retain credentials in DebugLogger.
+        val allowed = setOf("content-type", "content-length", "accept", "user-agent", "date")
+        for (index in 0 until headers.size) {
+            val name = headers.name(index)
+            val value = if (name.lowercase(java.util.Locale.ROOT) in allowed) {
+                headers.value(index)
+            } else "[REDACTED]"
+            append(name).append(": ").append(value).append('\n')
         }
     }
 }

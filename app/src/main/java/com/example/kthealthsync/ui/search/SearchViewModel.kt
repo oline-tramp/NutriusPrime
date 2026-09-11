@@ -7,7 +7,8 @@ import com.example.kthealthsync.*
 import com.example.kthealthsync.data.repository.KalorickeRepository
 import com.example.kthealthsync.domain.model.NutrientGoals
 import com.example.kthealthsync.domain.util.OpenFoodFactsHelper
-import kotlinx.coroutines.Job
+import com.example.kthealthsync.ui.LatestRequest
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -69,7 +70,8 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
         initialValue = NutrientGoals()
     )
 
-    private var searchJob: Job? = null
+    private val searchRequest = LatestRequest()
+    private val pageRequest = LatestRequest()
     private var currentPage = 0
     private var frequentPage = 0
     private var favoritePage = 0
@@ -101,6 +103,7 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
 
                 _myMeals.value = repository.getMyMeals(page = 0, limit = 50)
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 _errorMessage.value = e.message ?: "Failed to load defaults"
             } finally {
                 _isFetchingDefaults.value = false
@@ -129,6 +132,7 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
                     }
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 DebugLogger.addActionLog("Load next frequent page failed: ${e.message}")
             } finally {
                 _isLoadingMoreFrequent.value = false
@@ -157,6 +161,7 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
                     }
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 DebugLogger.addActionLog("Load next favorite page failed: ${e.message}")
             } finally {
                 _isLoadingMoreFavorites.value = false
@@ -166,98 +171,94 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
 
     fun onQueryChange(newQuery: String) {
         _query.value = newQuery
-        searchJob?.cancel()
+        resetSearch()
+        if (newQuery.length >= 3) performSearch(newQuery, debounce = true)
+    }
 
-        if (newQuery.length < 3) {
-            _results.value = emptyList()
-            _isSearching.value = false
-            currentPage = 0
-            _canLoadMore.value = true
-            return
-        }
-
-        searchJob = viewModelScope.launch {
-            delay(400)
-            performSearch(newQuery)
-        }
+    private fun resetSearch() {
+        searchRequest.cancel()
+        pageRequest.cancel()
+        _results.value = emptyList()
+        _isSearching.value = false
+        _isLoadingMore.value = false
+        _errorMessage.value = null
+        currentPage = 0
+        _canLoadMore.value = true
     }
 
     fun searchBarcode(barcode: String, onSingleMatchFound: ((AutocompleteResponseItem) -> Unit)? = null) {
         val cleanBarcode = barcode.trim()
         _query.value = cleanBarcode
-        searchJob?.cancel()
-
-        searchJob = viewModelScope.launch {
-            performSearch(cleanBarcode, onSingleMatchFound)
-        }
+        resetSearch()
+        performSearch(cleanBarcode, onSingleMatchFound = onSingleMatchFound)
     }
 
-    private suspend fun performSearch(
+    private fun performSearch(
         queryStr: String,
+        debounce: Boolean = false,
         onSingleMatchFound: ((AutocompleteResponseItem) -> Unit)? = null
     ) {
         _isSearching.value = true
-        _errorMessage.value = null
-        currentPage = 0
-        _canLoadMore.value = true
-        try {
-            var matches = repository.searchFood(queryStr, _myMeals.value, page = 0)
-            val isBarcode = queryStr.all { it.isDigit() } && queryStr.length in 8..14
-
-            if (matches.isEmpty() && isBarcode) {
-                // Try Open Food Facts fallback to resolve barcode to product name
-                val offName = OpenFoodFactsHelper.lookupProductName(queryStr)
-                if (!offName.isNullOrBlank()) {
-                    matches = repository.searchFood(offName, _myMeals.value, page = 0)
+        searchRequest.launch(
+            scope = viewModelScope,
+            load = {
+                if (debounce) delay(400)
+                var matches = repository.searchFood(queryStr, _myMeals.value, page = 0)
+                val isBarcode = queryStr.all { it.isDigit() } && queryStr.length in 8..14
+                if (matches.isEmpty() && isBarcode) {
+                    val offName = OpenFoodFactsHelper.lookupProductName(queryStr)
+                    if (!offName.isNullOrBlank()) {
+                        matches = repository.searchFood(offName, _myMeals.value, page = 0)
+                    }
                 }
-            }
-
-            _results.value = matches
-            if (matches.size < 10) {
-                _canLoadMore.value = false
-            }
-
-            if (matches.size == 1 && onSingleMatchFound != null) {
-                onSingleMatchFound(matches.first())
-            }
-        } catch (e: Exception) {
-            _errorMessage.value = e.message ?: "Search failed"
-        } finally {
-            _isSearching.value = false
-        }
+                matches
+            },
+            onSuccess = { matches ->
+                _results.value = matches
+                _canLoadMore.value = matches.size >= 10
+                if (matches.size == 1) onSingleMatchFound?.invoke(matches.first())
+            },
+            onError = { e -> _errorMessage.value = e.message ?: "Search failed" },
+            onFinally = { _isSearching.value = false }
+        )
     }
 
     fun clearSearch() {
         onQueryChange("")
     }
 
+    fun retry() {
+        when {
+            _query.value.length < 3 -> loadDefaults()
+            _results.value.isEmpty() -> onQueryChange(_query.value)
+            else -> loadNextPage()
+        }
+    }
+
     fun loadNextPage() {
         val q = _query.value
         if (q.length < 3 || _isSearching.value || _isLoadingMore.value || !_canLoadMore.value) return
-
-        viewModelScope.launch {
-            _isLoadingMore.value = true
-            try {
-                val nextPage = currentPage + 1
-                val newMatches = repository.searchFood(q, _myMeals.value, page = nextPage)
+        if (_results.value.isEmpty()) return
+        val nextPage = currentPage + 1
+        _isLoadingMore.value = true
+        _errorMessage.value = null
+        pageRequest.launch(
+            scope = viewModelScope,
+            load = { repository.searchFood(q, _myMeals.value, page = nextPage) },
+            onSuccess = { newMatches ->
                 val currentIds = _results.value.mapNotNull { it.id }.toSet()
                 val freshItems = newMatches.filter { it.id != null && !currentIds.contains(it.id) }
-
                 if (freshItems.isEmpty()) {
                     _canLoadMore.value = false
                 } else {
                     currentPage = nextPage
                     _results.value = _results.value + freshItems
-                    if (newMatches.size < 10) {
-                        _canLoadMore.value = false
-                    }
+                    _canLoadMore.value = newMatches.size >= 10
                 }
-            } catch (e: Exception) {
-                DebugLogger.addActionLog("Load next page failed: ${e.message}")
-            } finally {
-                _isLoadingMore.value = false
-            }
-        }
+            },
+            onError = { e -> _errorMessage.value = e.message ?: "Failed to load next page" },
+            onFinally = { _isLoadingMore.value = false }
+        )
     }
 
     suspend fun getFoodForm(guid: String): FoodFormResponse {

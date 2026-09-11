@@ -25,6 +25,7 @@ import com.example.kthealthsync.AddFoodRequest
 import com.example.kthealthsync.FoodFormUnitOption
 import com.example.kthealthsync.Foodstuff
 import com.example.kthealthsync.UnitOption
+import com.example.kthealthsync.domain.model.DiaryEditResult
 import com.example.kthealthsync.domain.model.LocalAppStrings
 import com.example.kthealthsync.domain.model.NutrientGoals
 import com.example.kthealthsync.domain.util.NutrientUtils
@@ -114,6 +115,28 @@ fun EditFoodDialog(
     var isSubmitting by remember { mutableStateOf(false) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
+    var needsOldEntryRemoval by remember { mutableStateOf(false) }
+
+    if (needsOldEntryRemoval) {
+        AlertDialog(
+            onDismissRequest = { if (!isSubmitting) onDismiss() },
+            title = { Text(strings.saveError) },
+            text = { Text(strings.editCleanupError) },
+            confirmButton = {
+                TextButton(enabled = !isSubmitting, onClick = {
+                    isSubmitting = true
+                    viewModel.deleteEntries(setOf(food.id.orEmpty())) { success ->
+                        isSubmitting = false
+                        if (success) onSuccess()
+                    }
+                }) { Text(strings.retry) }
+            },
+            dismissButton = {
+                TextButton(enabled = !isSubmitting, onClick = onDismiss) { Text(strings.close) }
+            }
+        )
+        return
+    }
 
     // Macro density base per 100g
     val portionGrams = remember(food.unit) {
@@ -491,12 +514,12 @@ fun EditFoodDialog(
                             viewModel.editFoodEntry(
                                 oldEntryId = food.id ?: "",
                                 request = request
-                            ) { success ->
+                            ) { result ->
                                 isSubmitting = false
-                                if (success) {
-                                    onSuccess()
-                                } else {
-                                    errorMsg = strings.saveError
+                                when (result) {
+                                    DiaryEditResult.SUCCESS -> onSuccess()
+                                    DiaryEditResult.ADD_FAILED -> errorMsg = strings.saveError
+                                    DiaryEditResult.DELETE_FAILED -> needsOldEntryRemoval = true
                                 }
                             }
                         }

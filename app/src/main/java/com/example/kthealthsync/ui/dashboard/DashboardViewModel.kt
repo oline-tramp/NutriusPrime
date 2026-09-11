@@ -23,6 +23,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
+import com.example.kthealthsync.ui.LatestRequest
+import com.example.kthealthsync.sync.DailySummaryRecords
+import com.example.kthealthsync.domain.model.DiaryEditResult
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -41,6 +45,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private val prefs = PreferencesManager(application)
     private val repository = KalorickeRepository(prefs = prefs)
     private val healthConnectManager = HealthConnectManager(application)
+    private val dailyRequest = LatestRequest()
 
     private val _selectedDate = MutableStateFlow(ZonedDateTime.now())
     val selectedDate: StateFlow<ZonedDateTime> = _selectedDate.asStateFlow()
@@ -65,7 +70,6 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
     init {
         loadDailyData()
-        syncGoals()
     }
 
     private fun syncGoals() {
@@ -75,7 +79,9 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 if (currentCookie.isNotEmpty()) {
                     repository.fetchNutrientGoalsFromApi()
                 }
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+            }
         }
     }
 
@@ -250,6 +256,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 loadDailyData(silent = true)
                 onComplete?.invoke(result.isSuccess)
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Log.e("NutriusDrag", "repository.moveDiaryEntries exception: ${e.message}", e)
                 DebugLogger.addActionLog("moveDiaryEntries error: ${e.message}")
                 onComplete?.invoke(false)
@@ -280,6 +287,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     onComplete?.invoke(false)
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Log.e("NutriusPrime", "addFoodEntry error: ${e.message}", e)
                 DebugLogger.addActionLog("addFoodEntry error: ${e.message}")
                 onComplete?.invoke(false)
@@ -290,24 +298,20 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     fun editFoodEntry(
         oldEntryId: String,
         request: AddFoodRequest,
-        onComplete: ((Boolean) -> Unit)? = null
+        onComplete: (DiaryEditResult) -> Unit
     ) {
         viewModelScope.launch {
-            try {
-                val addResp = repository.addFoodstuff(request)
-                if (addResp.code == 0 || addResp.code == null) {
-                    repository.deleteDiaryEntries(setOf(oldEntryId))
-                    loadDailyData(silent = true)
-                    onComplete?.invoke(true)
-                } else {
-                    DebugLogger.addActionLog("editFoodEntry failed to add: ${addResp.message}")
-                    onComplete?.invoke(false)
-                }
+            val result = try {
+                repository.editFoodEntry(oldEntryId, request)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                Log.e("NutriusPrime", "editFoodEntry error: ${e.message}", e)
                 DebugLogger.addActionLog("editFoodEntry error: ${e.message}")
-                onComplete?.invoke(false)
+                DiaryEditResult.ADD_FAILED
             }
+            // Refresh after partial success too, to show the actual server state.
+            loadDailyData(silent = true)
+            onComplete(result)
         }
     }
 
@@ -346,6 +350,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 loadDailyData(silent = true)
                 onComplete?.invoke(allSuccess)
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Log.e("NutriusPrime", "cloneEntries error: ${e.message}", e)
                 DebugLogger.addActionLog("cloneEntries error: ${e.message}")
                 onComplete?.invoke(false)
@@ -390,51 +395,40 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     private fun loadDailyData(silent: Boolean = false) {
-        viewModelScope.launch {
-            val currentCookie = prefs.cookieFlow.stateIn(this).value
-            if (currentCookie.isEmpty()) {
-                _uiState.value = DashboardUiState.Error("Please log in in Settings first.")
-                return@launch
-            }
-
-            // Silently check and update goals in background if TTL expired
-            launch {
-                try {
-                    repository.fetchNutrientGoalsFromApi()
-                } catch (_: Exception) {}
-            }
-
-            if (!silent) {
-                _uiState.value = DashboardUiState.Loading
-            }
-            val date = _selectedDate.value
-            val dateStr = date.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
-
-            try {
+        syncGoals()
+        val date = _selectedDate.value
+        val withMeals = _withMeals.value
+        val dateStr = date.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+        val version = DailySummaryRecords.nextVersion()
+        if (!silent) _uiState.value = DashboardUiState.Loading
+        dailyRequest.launch(
+            scope = viewModelScope,
+            load = {
+                check(prefs.cookieFlow.first().isNotEmpty()) { "Please log in in Settings first." }
                 DebugLogger.addActionLog("Fetching data from Kalorické Tabulky for $dateStr...")
-                val (summary, diaryResponse) = repository.getEnrichedDailySummary(dateStr, _withMeals.value)
+                repository.getEnrichedDailySummary(dateStr, withMeals)
+            },
+            onSuccess = { (summary, diaryResponse) ->
                 _uiState.value = DashboardUiState.Success(summary, diaryResponse)
-
-                // Trigger auto-sync to Health Connect if past day
-                val now = ZonedDateTime.now()
-                val isToday = date.toLocalDate() == now.toLocalDate()
-                if (!isToday && (summary.kcal > 0 || summary.protein > 0 || summary.water > 0)) {
-                    if (healthConnectManager.isAvailable() && healthConnectManager.hasAllPermissions()) {
-                        healthConnectManager.syncDailySummary(summary, date)
-                    } else {
-                        DebugLogger.addActionLog("Health Connect permissions missing or SDK unavailable for $dateStr auto-sync")
+                if (date.toLocalDate().isBefore(ZonedDateTime.now().toLocalDate())) {
+                    try {
+                        healthConnectManager.syncDailySummary(summary, date, version)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        // A sync failure must not discard a successfully loaded diary.
+                        DebugLogger.addActionLog("Health Connect sync failed for $dateStr: ${e.message}")
                     }
                 }
-            } catch (e: Exception) {
-                val errorMsg = e.message ?: "Unknown error"
-                if (errorMsg.contains("302") || errorMsg.contains("401")) {
-                    prefs.saveCookie("")
-                    _uiState.value = DashboardUiState.Error("Session expired. Please log in again in Settings.")
-                } else {
-                    _uiState.value = DashboardUiState.Error("Error: $errorMsg")
-                }
-                DebugLogger.addActionLog("Error loading $dateStr: $errorMsg")
+            },
+            onError = { e ->
+                val code = (e as? retrofit2.HttpException)?.code()
+                val message = if (code == 302 || code == 401) {
+                    "Session expired. Please log in again in Settings."
+                } else "Error: ${e.message ?: "Unknown error"}"
+                _uiState.value = DashboardUiState.Error(message)
+                DebugLogger.addActionLog("Error loading $dateStr: ${e.message}")
             }
-        }
+        )
     }
 }

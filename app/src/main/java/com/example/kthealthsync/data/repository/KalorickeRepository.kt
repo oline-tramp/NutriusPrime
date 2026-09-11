@@ -4,6 +4,8 @@ import com.example.kthealthsync.*
 import com.example.kthealthsync.domain.model.DailySummary
 import com.example.kthealthsync.domain.model.FoodCategory
 import com.example.kthealthsync.domain.util.NutrientUtils
+import kotlinx.coroutines.CancellationException
+import com.example.kthealthsync.domain.model.DiaryEditResult
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -14,7 +16,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 class KalorickeRepository(
     private val api: KalorickeApiService = RetrofitClient.instance,
-    private val prefs: PreferencesManager
+    private val prefs: RepositoryPreferences
 ) {
     // Thread-safe caches
     private val recipeDetailsCache = ConcurrentHashMap<String, RecipeData>()
@@ -41,9 +43,10 @@ class KalorickeRepository(
         try {
             return api.getDiary(date, cookie)
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             val code = (e as? retrofit2.HttpException)?.code()
             val errorMsg = e.message ?: ""
-            val isAuthError = code == 302 || code == 401 || errorMsg.contains("302") || errorMsg.contains("401")
+            val isAuthError = code == 302 || code == 401
 
             if (isAuthError) {
                 val email = prefs.emailFlow.first()
@@ -66,6 +69,7 @@ class KalorickeRepository(
                             DebugLogger.addActionLog("Auto-login failed. Server returned code ${loginResp.code()}")
                         }
                     } catch (loginEx: Exception) {
+                        if (loginEx is CancellationException) throw loginEx
                         DebugLogger.addActionLog("Auto-login request failed: ${loginEx.message}")
                     }
                 } else {
@@ -92,6 +96,7 @@ class KalorickeRepository(
                 cachedMealMap = map
                 lastMealListFetchTime = now
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 DebugLogger.addActionLog("Failed to fetch meal list: ${e.message}")
             }
         }
@@ -104,6 +109,7 @@ class KalorickeRepository(
             val resp = api.getRecipeDetail(guid, cookie)
             resp.data?.also { recipeDetailsCache[guid] = it }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             DebugLogger.addActionLog("Failed to fetch recipe $guid: ${e.message}")
             null
         }
@@ -113,7 +119,8 @@ class KalorickeRepository(
         val diaryResponse = getDiaryWithAutoLogin(dateStr)
         val cookie = getCookie()
         val mealMap = getMealMap(cookie)
-        val rawFoods = diaryResponse.data?.times?.flatMap { it.foodstuff ?: emptyList() } ?: emptyList()
+        val times = checkNotNull(diaryResponse.data?.times) { "Diary response is missing meal data" }
+        val rawFoods = times.flatMap { it.foodstuff ?: emptyList() }
 
         val allFoodstuffs = rawFoods.map { f ->
             val name = f.title ?: f.name ?: f.nazev
@@ -253,22 +260,25 @@ class KalorickeRepository(
             return cat
         }
 
-        val cat = fetchFoodCategoryFromWeb(food)
+        val cat = fetchFoodCategoryFromWeb(food) ?: return FoodCategory.OTHER
         categoryMemoryCache[key] = cat
         prefs.saveFoodCategory(key, cat.name)
         return cat
     }
 
-    private suspend fun fetchFoodCategoryFromWeb(food: Foodstuff): FoodCategory {
+    private suspend fun fetchFoodCategoryFromWeb(food: Foodstuff): FoodCategory? {
         val cookie = getCookie()
         val guid = food.guid
         var itemUrl: String? = null
+        var lookupFailed = false
 
         if (guid != null) {
             try {
                 val formResp = api.getFoodForm(guid, cookie)
                 itemUrl = formResp.data?.url
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                lookupFailed = true
                 DebugLogger.addActionLog("Failed to get food form for category $guid: ${e.message}")
             }
         }
@@ -280,12 +290,14 @@ class KalorickeRepository(
                     val searchItems = api.searchFood(query = title, page = 0, cookie = cookie)
                     itemUrl = searchItems.firstOrNull()?.url
                 } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    lookupFailed = true
                     DebugLogger.addActionLog("Failed search food for category $title: ${e.message}")
                 }
             }
         }
 
-        if (itemUrl.isNullOrBlank()) return FoodCategory.OTHER
+        if (itemUrl.isNullOrBlank()) return if (lookupFailed) null else FoodCategory.OTHER
 
         return try {
             val fullUrl = if (itemUrl.contains("/")) itemUrl else "potraviny/$itemUrl"
@@ -293,8 +305,9 @@ class KalorickeRepository(
             val htmlResp = api.getFoodHtml(htmlUrl, cookie).string()
             NutrientUtils.parseCategoryFromHtml(htmlResp, food.title ?: food.name ?: food.nazev)
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             DebugLogger.addActionLog("Failed to fetch food category HTML for $itemUrl: ${e.message}")
-            FoodCategory.OTHER
+            null
         }
     }
 
@@ -306,8 +319,9 @@ class KalorickeRepository(
                 api.getFrequentFoodstuff(page = page, limit = limit, cookie = cookieParam).filter { it.id != null }
             }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             DebugLogger.addActionLog("Get frequent foodstuff page $page failed: ${e.message}")
-            emptyList()
+            throw e
         }
     }
 
@@ -319,8 +333,9 @@ class KalorickeRepository(
                 api.getFavoriteFoodstuff(page = page, limit = limit, cookie = cookieParam).filter { it.id != null }
             }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             DebugLogger.addActionLog("Get favorite foodstuff page $page failed: ${e.message}")
-            emptyList()
+            throw e
         }
     }
 
@@ -332,8 +347,9 @@ class KalorickeRepository(
                 api.getMyMeals(page = page, limit = limit, cookie = cookieParam).filter { it.id != null }
             }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             DebugLogger.addActionLog("Get my meals page $page failed: ${e.message}")
-            emptyList()
+            throw e
         }
     }
 
@@ -350,8 +366,9 @@ class KalorickeRepository(
                 api.searchFood(query = query, page = page, cookie = cookieParam).filter { it.id != null }
             }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             DebugLogger.addActionLog("Search food page $page failed: ${e.message}")
-            emptyList()
+            throw e
         }
 
         val localMatches = if (page == 0) {
@@ -384,13 +401,14 @@ class KalorickeRepository(
             }
             parsed
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             DebugLogger.addActionLog("Failed to fetch food macros HTML: ${e.message}")
             emptyMap()
         }
     }
 
     suspend fun addFoodstuff(request: AddFoodRequest): AddFoodResponse {
-        return executeWithRetry(operationName = "addFoodstuff") { cookieParam ->
+        return executeWithRetry(operationName = "addFoodstuff", retryTransientErrors = false) { cookieParam ->
             api.addFoodstuff(request, cookieParam)
         }
     }
@@ -463,8 +481,20 @@ class KalorickeRepository(
             DebugLogger.addActionLog("Fetched target goals from Kalorické Tabulky API: ${goals.kcal.toInt()} kcal, P:${goals.protein.toInt()}g, C:${goals.carbs.toInt()}g, F:${goals.fat.toInt()}g")
             goals
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             DebugLogger.addActionLog("Failed to fetch goals from API: ${e.message}")
             null
+        }
+    }
+
+    suspend fun editFoodEntry(oldEntryId: String, request: AddFoodRequest): DiaryEditResult {
+        require(oldEntryId.isNotBlank()) { "Missing diary entry ID" }
+        val response = addFoodstuff(request)
+        if (response.code != 0) return DiaryEditResult.ADD_FAILED
+        return if (deleteDiaryEntries(setOf(oldEntryId)).isSuccess) {
+            DiaryEditResult.SUCCESS
+        } else {
+            DiaryEditResult.DELETE_FAILED
         }
     }
 
@@ -477,9 +507,11 @@ class KalorickeRepository(
             val resp = executeWithRetry(operationName = "deleteFoodstuffDiary") { cookieParam ->
                 api.deleteFoodstuffDiary(joined, cookieParam)
             }
+            check(resp.code == 0) { resp.message ?: "Delete rejected (code=${resp.code})" }
             DebugLogger.addActionLog("Deleted ${validIds.size} diary entries: $joined (code=${resp.code}, msg=${resp.message})")
             Result.success(Unit)
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             DebugLogger.addActionLog("Failed to delete diary entries: ${e.message}")
             Result.failure(e)
         }
@@ -500,10 +532,12 @@ class KalorickeRepository(
                 val resp = executeWithRetry(operationName = "moveFoodstuffDiary") { cookieParam ->
                     api.moveFoodstuffDiary(id, targetTimeId, dateParam, cookieParam)
                 }
+                check(resp.code == 0) { resp.message ?: "Move rejected (code=${resp.code})" }
                 DebugLogger.addActionLog("Moved diary entry $id to time=$targetTimeId, date=$dateParam (code=${resp.code})")
             }
             Result.success(Unit)
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             DebugLogger.addActionLog("Failed to move diary entries: ${e.message}")
             Result.failure(e)
         }
@@ -519,6 +553,7 @@ class KalorickeRepository(
     suspend fun <T> executeWithRetry(
         maxRetries: Int = 3,
         operationName: String = "operation",
+        retryTransientErrors: Boolean = true,
         block: suspend (cookie: String) -> T
     ): T {
         var lastException: Exception? = null
@@ -528,10 +563,11 @@ class KalorickeRepository(
             try {
                 return block(currentCookie)
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 lastException = e
                 val code = (e as? retrofit2.HttpException)?.code()
                 val errorMsg = e.message ?: ""
-                val isAuthError = code == 302 || code == 401 || errorMsg.contains("302") || errorMsg.contains("401")
+                val isAuthError = code == 302 || code == 401
 
                 DebugLogger.addActionLog("[$operationName] Attempt $attempt/$maxRetries failed (code=$code): $errorMsg")
 
@@ -555,12 +591,15 @@ class KalorickeRepository(
                                 DebugLogger.addActionLog("[$operationName] Auto-login failed: HTTP ${loginResp.code()}")
                             }
                         } catch (loginEx: Exception) {
+                            if (loginEx is CancellationException) throw loginEx
                             DebugLogger.addActionLog("[$operationName] Auto-login request error: ${loginEx.message}")
                         }
                     } else {
                         DebugLogger.addActionLog("[$operationName] 302/401 received but no credentials saved for auto-login.")
                     }
                 }
+
+                if (!retryTransientErrors) throw e
 
                 if (attempt < maxRetries) {
                     val delayMs = attempt * 350L

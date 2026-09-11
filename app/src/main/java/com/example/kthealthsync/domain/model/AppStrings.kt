@@ -90,6 +90,7 @@ data class AppStrings(
     val cloneError: String,
     val saveSuccess: String,
     val saveError: String,
+    val editCleanupError: String,
     val sessionExpired: String,
 
     // Search & Barcode
@@ -208,6 +209,7 @@ val RuStrings = AppStrings(
     cloneError = "Ошибка при клонировании",
     saveSuccess = "Запись сохранена",
     saveError = "Ошибка сохранения изменений",
+    editCleanupError = "Новая запись добавлена, но старую удалить не удалось. Повторите удаление старой записи. Новая запись повторно добавляться не будет.",
     sessionExpired = "Сессия истекла. Пожалуйста, войдите снова в Настройках.",
 
     searchPlaceholder = "Поиск продуктов...",
@@ -322,6 +324,7 @@ val CsStrings = AppStrings(
     cloneError = "Chyba při klonování",
     saveSuccess = "Položka uložena",
     saveError = "Chyba při ukládání",
+    editCleanupError = "Nový záznam byl přidán, ale starý se nepodařilo odstranit. Zkuste znovu odstranit starý záznam. Nový se znovu nepřidá.",
     sessionExpired = "Platnost relace vypršela. Přihlaste se prosím znovu v Nastavení.",
 
     searchPlaceholder = "Hledat potraviny...",
@@ -436,6 +439,7 @@ val EnStrings = AppStrings(
     cloneError = "Error cloning entries",
     saveSuccess = "Entry saved",
     saveError = "Error saving changes",
+    editCleanupError = "The new entry was added, but the old entry could not be deleted. Retry deleting the old entry. The new entry will not be added again.",
     sessionExpired = "Session expired. Please log in again in Settings.",
 
     searchPlaceholder = "Search food...",

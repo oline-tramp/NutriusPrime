@@ -5,6 +5,8 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.kthealthsync.data.repository.KalorickeRepository
 import com.example.kthealthsync.sync.HealthConnectManager
+import kotlinx.coroutines.CancellationException
+import com.example.kthealthsync.sync.DailySummaryRecords
 import kotlinx.coroutines.flow.first
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
@@ -40,15 +42,10 @@ class SyncWorker(
             val yesterday = ZonedDateTime.now().minusDays(1)
             val dateStr = yesterday.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
 
+            val version = DailySummaryRecords.nextVersion()
             val (summary, _) = repository.getEnrichedDailySummary(dateStr, withMeals = false)
 
-            val hasData = summary.kcal > 0 || summary.protein > 0 || summary.water > 0
-            if (!hasData) {
-                DebugLogger.addActionLog("[SyncWorker] No data found for $dateStr. Success.")
-                return Result.success()
-            }
-
-            val success = hcManager.syncDailySummary(summary, yesterday)
+            val success = hcManager.syncDailySummary(summary, yesterday, version)
             if (success) {
                 DebugLogger.addActionLog("[SyncWorker] Sync complete! Uploaded ${summary.kcal.toInt()} kcal.")
                 Result.success()
@@ -56,6 +53,8 @@ class SyncWorker(
                 DebugLogger.addActionLog("[SyncWorker] Health Connect sync returned false.")
                 Result.retry()
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             DebugLogger.addActionLog("[SyncWorker] Error during sync: ${e.message}")
             e.printStackTrace()

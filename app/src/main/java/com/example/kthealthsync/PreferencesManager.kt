@@ -16,7 +16,7 @@ import kotlinx.coroutines.flow.map
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
-class PreferencesManager(private val context: Context) {
+class PreferencesManager(private val context: Context) : com.example.kthealthsync.data.repository.RepositoryPreferences {
     companion object {
         val COOKIE_KEY = stringPreferencesKey("kt_cookie")
         val EMAIL_KEY = stringPreferencesKey("kt_email")
@@ -59,9 +59,9 @@ class PreferencesManager(private val context: Context) {
         sharedPrefs
     }
 
-    val cookieFlow: Flow<String> = context.dataStore.data.map { it[COOKIE_KEY] ?: "" }
-    val emailFlow: Flow<String> = context.dataStore.data.map { it[EMAIL_KEY] ?: "" }
-    val passwordHashFlow: Flow<String> = context.dataStore.data.map { it[PASSWORD_HASH_KEY] ?: "" }
+    override val cookieFlow: Flow<String> = context.dataStore.data.map { it[COOKIE_KEY] ?: "" }
+    override val emailFlow: Flow<String> = context.dataStore.data.map { it[EMAIL_KEY] ?: "" }
+    override val passwordHashFlow: Flow<String> = context.dataStore.data.map { it[PASSWORD_HASH_KEY] ?: "" }
     val syncHourFlow: Flow<Int> = context.dataStore.data.map { it[SYNC_HOUR_KEY] ?: 6 }
     val syncMinuteFlow: Flow<Int> = context.dataStore.data.map { it[SYNC_MINUTE_KEY] ?: 0 }
     val autoSyncEnabledFlow: Flow<Boolean> = context.dataStore.data.map { it[AUTO_SYNC_ENABLED_KEY] ?: false }
@@ -77,7 +77,7 @@ class PreferencesManager(private val context: Context) {
         }
     }
 
-    val nutrientGoalsFlow: Flow<NutrientGoals> = context.dataStore.data.map { prefs ->
+    override val nutrientGoalsFlow: Flow<NutrientGoals> = context.dataStore.data.map { prefs ->
         val defaults = NutrientGoals()
         NutrientGoals(
             kcal = prefs[GOAL_KCAL_KEY] ?: defaults.kcal,
@@ -92,7 +92,7 @@ class PreferencesManager(private val context: Context) {
         )
     }
 
-    suspend fun saveCookie(cookie: String) {
+    override suspend fun saveCookie(cookie: String) {
         context.dataStore.edit { it[COOKIE_KEY] = cookie }
     }
     
@@ -118,7 +118,7 @@ class PreferencesManager(private val context: Context) {
         context.dataStore.edit { it[APP_LANGUAGE_KEY] = language.code }
     }
 
-    suspend fun saveNutrientGoals(goals: NutrientGoals) {
+    override suspend fun saveNutrientGoals(goals: NutrientGoals) {
         context.dataStore.edit { prefs ->
             prefs[GOAL_KCAL_KEY] = goals.kcal
             prefs[GOAL_PROTEIN_KEY] = goals.protein
@@ -132,11 +132,11 @@ class PreferencesManager(private val context: Context) {
         }
     }
 
-    fun getFoodCategory(guidOrUrl: String): String? {
+    override fun getFoodCategory(guidOrUrl: String): String? {
         return categoryPrefs.getString(guidOrUrl, null)
     }
 
-    fun saveFoodCategory(guidOrUrl: String, categoryName: String) {
+    override fun saveFoodCategory(guidOrUrl: String, categoryName: String) {
         categoryPrefs.edit().putString(guidOrUrl, categoryName).apply()
     }
 

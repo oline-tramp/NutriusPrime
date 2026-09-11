@@ -1,5 +1,6 @@
 package com.example.kthealthsync.domain.util
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -50,6 +51,7 @@ object OpenFoodFactsHelper {
                 }
             }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             null
         }
     }

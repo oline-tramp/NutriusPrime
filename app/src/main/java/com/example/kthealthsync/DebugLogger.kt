@@ -3,6 +3,7 @@ package com.example.kthealthsync
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
@@ -56,12 +57,7 @@ object DebugLogger {
     }
 
     private fun addEntry(entry: LogEntry) {
-        val currentLogs = _logs.value.toMutableList()
-        currentLogs.add(0, entry)
-        if (currentLogs.size > 100) {
-            currentLogs.removeAt(currentLogs.size - 1)
-        }
-        _logs.value = currentLogs
+        _logs.update { current -> (listOf(entry) + current).take(100) }
     }
 
     fun clearLogs() {
