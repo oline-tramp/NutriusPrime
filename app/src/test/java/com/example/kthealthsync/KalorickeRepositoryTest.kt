@@ -174,6 +174,38 @@ class KalorickeRepositoryTest {
         assertTrue(calls.isEmpty())
     }
 
+    @Test fun myMealsLoadsAllPagesEvenWhenServerReturnsShortPages() = runTest {
+        val pages = mutableListOf<Int>()
+        val repo = repository { method, args ->
+            check(method == "getMyMeals")
+            val page = args[0] as Int
+            pages += page
+            // Server caps each page at 30 despite our requested 50.
+            (page * 30 until minOf((page + 1) * 30, 125)).map {
+                AutocompleteResponseItem("$it", "Meal $it", null, null, null, null, null, null, null)
+            }
+        }
+        assertEquals(125, repo.getAllMyMeals().size)
+        assertEquals(listOf(0, 1, 2, 3, 4, 5), pages)
+    }
+
+    @Test fun repeatedMealPageFailsInsteadOfLoopingOrReturningPartialCache() = runTest {
+        val repo = repository { _, _ -> listOf(
+            AutocompleteResponseItem("one", "Meal", null, null, null, null, null, null, null)
+        ) }
+        assertTrue(runCatching { repo.getAllMyMeals() }.exceptionOrNull() is IllegalStateException)
+        assertEquals(2, calls.size)
+    }
+
+    @Test fun laterMealPageFailureDoesNotReturnPartialList() = runTest {
+        val repo = repository { _, args ->
+            if (args[0] == 0) listOf(
+                AutocompleteResponseItem("one", "Meal", null, null, null, null, null, null, null)
+            ) else throw IOException("offline")
+        }
+        assertTrue(runCatching { repo.getAllMyMeals() }.exceptionOrNull() is IOException)
+    }
+
     private class MemoryPreferences : RepositoryPreferences {
         override val cookieFlow = MutableStateFlow("JSESSIONID=test")
         override val emailFlow = MutableStateFlow("")

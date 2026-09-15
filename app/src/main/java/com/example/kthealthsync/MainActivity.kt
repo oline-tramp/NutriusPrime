@@ -20,6 +20,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.health.connect.client.PermissionController
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.lifecycleScope
 import com.example.kthealthsync.domain.model.AppLanguage
 import com.example.kthealthsync.domain.model.LocalAppStrings
@@ -30,6 +32,7 @@ import com.example.kthealthsync.ui.dashboard.DashboardUiState
 import com.example.kthealthsync.ui.dashboard.DashboardViewModel
 import com.example.kthealthsync.ui.debug.DebugLogsScreen
 import com.example.kthealthsync.ui.login.LoginScreen
+import com.example.kthealthsync.ui.search.SearchViewModel
 import com.example.kthealthsync.ui.search.SearchScreen
 import com.example.kthealthsync.ui.settings.SettingsScreen
 import kotlinx.coroutines.launch
@@ -39,11 +42,17 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var prefs: PreferencesManager
     private val healthConnectManager by lazy { HealthConnectManager(this) }
+    private val searchViewModel: SearchViewModel by viewModels()
     private val dashboardViewModel: DashboardViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = PreferencesManager(this)
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                searchViewModel.refreshMyMealsWhileActive()
+            }
+        }
 
         val requestPermissionActivityContract = PermissionController.createRequestPermissionResultContract()
         val requestPermissions = registerForActivityResult(requestPermissionActivityContract) { granted ->
@@ -120,6 +129,7 @@ class MainActivity : ComponentActivity() {
                                 val formattedDate = selectedDate.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
                                 val summary = (dashboardUiState as? DashboardUiState.Success)?.summary
                                 SearchScreen(
+                                    viewModel = searchViewModel,
                                     date = formattedDate,
                                     preselectedMealTimeGuid = preselectedMealTimeGuid,
                                     initialBarcode = initialSearchBarcode,

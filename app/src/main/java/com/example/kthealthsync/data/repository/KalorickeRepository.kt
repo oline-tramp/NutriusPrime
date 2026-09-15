@@ -342,6 +342,27 @@ class KalorickeRepository(
         }
     }
 
+    suspend fun getAllMyMeals(): List<AutocompleteResponseItem> {
+        if (getCookie().isBlank()) return emptyList()
+        val meals = linkedMapOf<String, AutocompleteResponseItem>()
+        val seenPages = mutableSetOf<Set<String?>>()
+        var page = 0
+        while (true) {
+            val items = executeWithRetry(operationName = "getAllMyMeals page $page") { cookie ->
+                api.getMyMeals(page = page, limit = 50, cookie = cookie)
+            }
+            if (items.isEmpty()) return meals.values.toList()
+            check(seenPages.add(items.map { it.id }.toSet())) {
+                "My meals API repeated a page; keeping the previous complete cache"
+            }
+            items.forEach { item ->
+                item.id?.takeIf { it.isNotBlank() }?.let { meals[it] = item }
+            }
+            // A server may cap its page size below the requested limit. Only an empty page ends it.
+            page++
+        }
+    }
+
     suspend fun getMyMeals(page: Int = 0, limit: Int = 50): List<AutocompleteResponseItem> {
         val cookie = getCookie()
         if (cookie.isEmpty()) return emptyList()

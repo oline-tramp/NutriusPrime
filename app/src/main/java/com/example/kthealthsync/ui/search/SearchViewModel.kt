@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.kthealthsync.*
+import com.example.kthealthsync.data.repository.MyMealsCache
 import com.example.kthealthsync.data.repository.KalorickeRepository
 import com.example.kthealthsync.domain.model.NutrientGoals
 import com.example.kthealthsync.domain.util.OpenFoodFactsHelper
@@ -15,6 +16,10 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 class SearchViewModel(application: Application) : AndroidViewModel(application) {
@@ -26,7 +31,28 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
     val query: StateFlow<String> = _query.asStateFlow()
 
     private val _results = MutableStateFlow<List<AutocompleteResponseItem>>(emptyList())
-    val results: StateFlow<List<AutocompleteResponseItem>> = _results.asStateFlow()
+    private val mealsCache = MyMealsCache(
+        loadMeals = repository::getAllMyMeals,
+        onError = { DebugLogger.addActionLog("Refresh my meals failed: ${it.message}") }
+    )
+    val myMeals = mealsCache.meals
+    private var mealsAccount: String? = null
+    val results: StateFlow<List<AutocompleteResponseItem>> = combine(_results, myMeals, _query) { remote, meals, query ->
+        if (query.length < 3) emptyList()
+        else (meals.filter { it.title?.contains(query, ignoreCase = true) == true } + remote).distinctBy { it.id }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    suspend fun refreshMyMealsWhileActive() {
+        combine(prefs.cookieFlow.map { it.isNotBlank() }.distinctUntilChanged(), prefs.emailFlow) { loggedIn, email ->
+            if (loggedIn) email else null
+        }.distinctUntilChanged().collectLatest { account ->
+            if (account != mealsAccount) {
+                mealsCache.clear()
+                mealsAccount = account
+            }
+            if (account != null) mealsCache.refreshWhileActive()
+        }
+    }
 
     private val _frequentItems = MutableStateFlow<List<AutocompleteResponseItem>>(emptyList())
     val frequentItems: StateFlow<List<AutocompleteResponseItem>> = _frequentItems.asStateFlow()
@@ -34,8 +60,6 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
     private val _favoriteItems = MutableStateFlow<List<AutocompleteResponseItem>>(emptyList())
     val favoriteItems: StateFlow<List<AutocompleteResponseItem>> = _favoriteItems.asStateFlow()
 
-    private val _myMeals = MutableStateFlow<List<AutocompleteResponseItem>>(emptyList())
-    val myMeals: StateFlow<List<AutocompleteResponseItem>> = _myMeals.asStateFlow()
 
     private val _isSearching = MutableStateFlow(false)
     val isSearching: StateFlow<Boolean> = _isSearching.asStateFlow()
@@ -101,7 +125,6 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
                     _canLoadMoreFavorites.value = false
                 }
 
-                _myMeals.value = repository.getMyMeals(page = 0, limit = 50)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 _errorMessage.value = e.message ?: "Failed to load defaults"
@@ -203,12 +226,12 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
             scope = viewModelScope,
             load = {
                 if (debounce) delay(400)
-                var matches = repository.searchFood(queryStr, _myMeals.value, page = 0)
+                var matches = repository.searchFood(queryStr, emptyList(), page = 0)
                 val isBarcode = queryStr.all { it.isDigit() } && queryStr.length in 8..14
                 if (matches.isEmpty() && isBarcode) {
                     val offName = OpenFoodFactsHelper.lookupProductName(queryStr)
                     if (!offName.isNullOrBlank()) {
-                        matches = repository.searchFood(offName, _myMeals.value, page = 0)
+                        matches = repository.searchFood(offName, emptyList(), page = 0)
                     }
                 }
                 matches
@@ -216,7 +239,8 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
             onSuccess = { matches ->
                 _results.value = matches
                 _canLoadMore.value = matches.size >= 10
-                if (matches.size == 1) onSingleMatchFound?.invoke(matches.first())
+                val combined = (myMeals.value.filter { it.title?.contains(queryStr, ignoreCase = true) == true } + matches).distinctBy { it.id }
+                if (combined.size == 1) onSingleMatchFound?.invoke(combined.first())
             },
             onError = { e -> _errorMessage.value = e.message ?: "Search failed" },
             onFinally = { _isSearching.value = false }
@@ -244,7 +268,7 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
         _errorMessage.value = null
         pageRequest.launch(
             scope = viewModelScope,
-            load = { repository.searchFood(q, _myMeals.value, page = nextPage) },
+            load = { repository.searchFood(q, emptyList(), page = nextPage) },
             onSuccess = { newMatches ->
                 val currentIds = _results.value.mapNotNull { it.id }.toSet()
                 val freshItems = newMatches.filter { it.id != null && !currentIds.contains(it.id) }

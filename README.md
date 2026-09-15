@@ -76,3 +76,5 @@ adb shell am start -W -n com.example.kthealthsync/.MainActivity
 ```
 
 Health Connect permissions must be granted on the device. Daily records use stable client IDs so repeated syncs update the same day. Duplicates created by older app versions are not removed automatically.
+
+«Мои блюда» загружаются со всех страниц в кэш памяти сразу при открытии приложения и каждые 20 секунд, пока оно на экране. В фоне обновление приостанавливается. При сетевой ошибке сохраняется предыдущий полный список; результаты поиска обновляются вместе с кэшем.
