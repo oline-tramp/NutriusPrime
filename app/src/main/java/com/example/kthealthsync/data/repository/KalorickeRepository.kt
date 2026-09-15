@@ -345,37 +345,45 @@ class KalorickeRepository(
     suspend fun getAllMyMeals(): List<AutocompleteResponseItem> {
         if (getCookie().isBlank()) return emptyList()
         val meals = linkedMapOf<String, AutocompleteResponseItem>()
-        val seenPages = mutableSetOf<Set<String?>>()
         var page = 0
         while (true) {
-            val items = executeWithRetry(operationName = "getAllMyMeals page $page") { cookie ->
-                api.getMyMeals(page = page, limit = 50, cookie = cookie)
+            val response = executeWithRetry(operationName = "getAllMyMeals page $page") { cookie ->
+                api.getMealList(cookie = cookie, page = page, limit = 50)
             }
-            if (items.isEmpty()) return meals.values.toList()
-            check(seenPages.add(items.map { it.id }.toSet())) {
-                "My meals API repeated a page; keeping the previous complete cache"
+            val items = checkNotNull(response.data) { "Personal meals response has no data" }
+            if (items.isEmpty()) {
+                check(response.count == null || meals.size >= response.count) {
+                    "Personal meals list ended before all meals were received"
+                }
+                return meals.values.toList()
             }
+            val previousSize = meals.size
             items.forEach { item ->
-                item.id?.takeIf { it.isNotBlank() }?.let { meals[it] = item }
+                val id = checkNotNull(item.guid?.takeIf { it.isNotBlank() }) { "Personal meal has no ID" }
+                meals[id] = AutocompleteResponseItem(
+                    id = id, title = item.title, url = null, unit = "g", isLiquid = false,
+                    // The list's energy is for the entire recipe, not per 100 g.
+                    value = null, favorite = true, hasImage = false, clazz = "meal"
+                )
             }
-            // A server may cap its page size below the requested limit. Only an empty page ends it.
+            check(meals.size > previousSize) { "Personal meals API repeated a page" }
+            if (response.count != null && meals.size >= response.count) return meals.values.toList()
             page++
         }
     }
 
-    suspend fun getMyMeals(page: Int = 0, limit: Int = 50): List<AutocompleteResponseItem> {
-        val cookie = getCookie()
-        if (cookie.isEmpty()) return emptyList()
-        return try {
-            executeWithRetry(operationName = "getMyMeals") { cookieParam ->
-                api.getMyMeals(page = page, limit = limit, cookie = cookieParam).filter { it.id != null }
-            }
-        } catch (e: Exception) {
-            if (e is CancellationException) throw e
-            DebugLogger.addActionLog("Get my meals page $page failed: ${e.message}")
-            throw e
+    suspend fun getPersonalMealForm(guid: String): com.example.kthealthsync.domain.model.PersonalMealForm {
+        val response = executeWithRetry(operationName = "getPersonalMealForm") { cookie ->
+            api.getPersonalMealForm(guid, cookie)
         }
+        check(response.code == 0) { response.message ?: "Failed to load meal form" }
+        return com.example.kthealthsync.domain.model.PersonalMealForm(checkNotNull(response.data) { "Meal form has no data" })
     }
+
+    suspend fun addPersonalMeal(request: com.google.gson.JsonObject): AddFoodResponse =
+        executeWithRetry(operationName = "addPersonalMeal", retryTransientErrors = false) { cookie ->
+            api.addPersonalMeal(request, cookie)
+        }
 
     suspend fun searchFood(
         query: String,

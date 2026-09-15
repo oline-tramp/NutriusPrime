@@ -56,6 +56,8 @@ fun SearchScreen(
     val frequentItems by viewModel.frequentItems.collectAsState()
     val favoriteItems by viewModel.favoriteItems.collectAsState()
     val myMeals by viewModel.myMeals.collectAsState()
+    val isRefreshingMeals by viewModel.isRefreshingMeals.collectAsState()
+    val mealsError by viewModel.mealsError.collectAsState()
     val isSearching by viewModel.isSearching.collectAsState()
     val isFetchingDefaults by viewModel.isFetchingDefaults.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
@@ -198,6 +200,11 @@ fun SearchScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
+                if (selectedTab == 1 && query.length < 3) {
+                    if (isRefreshingMeals) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    mealsError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                }
+
                 LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
                     items(listToShow) { item ->
                         FoodListItem(item = item) {
@@ -305,8 +312,9 @@ fun FoodListItem(item: AutocompleteResponseItem, onClick: () -> Unit) {
         Spacer(modifier = Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(item.title ?: "Unknown", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-            val energy = item.value ?: "0"
-            Text("$energy kcal / 100${item.unit ?: "g"}", color = Color.Gray, fontSize = 14.sp)
+            item.value?.let { energy ->
+                Text("$energy kcal / 100${item.unit ?: "g"}", color = Color.Gray, fontSize = 14.sp)
+            }
         }
     }
 }

@@ -1,5 +1,6 @@
 package com.example.kthealthsync
 
+import retrofit2.http.Query
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Url
@@ -59,7 +60,8 @@ data class Foodstuff(
 )
 
 data class MealListResponse(
-    val data: List<MealListItem>?
+    val data: List<MealListItem>?,
+    val count: Int? = null
 )
 
 data class MealListItem(
@@ -123,6 +125,8 @@ data class FoodFormResponse(
     val data: FoodFormData?
 )
 
+data class PersonalMealFormResponse(val code: Int?, val message: String?, val data: com.google.gson.JsonObject?)
+
 data class AddFoodRequest(
     val guid: String,
     val title: String,
@@ -185,11 +189,13 @@ interface KalorickeApiService {
         @Header("Accept") accept: String = "application/json, text/plain, */*"
     ): retrofit2.Response<LoginResponse>
 
-    @GET("user/settings/meal/list?format=json&page=0&limit=100")
+    @GET("user/settings/meal/list?format=json")
     suspend fun getMealList(
         @Header("Cookie") cookie: String,
         @Header("User-Agent") userAgent: String = "Mozilla/5.0 (Linux; Android 14; Pixel 7 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
-        @Header("Accept") accept: String = "application/json, text/plain, */*"
+        @Header("Accept") accept: String = "application/json, text/plain, */*",
+        @Query("page") page: Int = 0,
+        @Query("limit") limit: Int = 100
     ): MealListResponse
 
     @GET("recipe/detail/{guid}?format=json&unit=null&multiplier=null")
@@ -226,6 +232,12 @@ interface KalorickeApiService {
         @Header("User-Agent") userAgent: String = "Mozilla/5.0",
         @Header("Accept") accept: String = "application/json"
     ): List<AutocompleteResponseItem>
+
+    @GET("user/meal/add/form/{guid}?format=json")
+    suspend fun getPersonalMealForm(@Path("guid") guid: String, @Header("Cookie") cookie: String): PersonalMealFormResponse
+
+    @POST("user/meal/add?format=json")
+    suspend fun addPersonalMeal(@Body request: com.google.gson.JsonObject, @Header("Cookie") cookie: String): AddFoodResponse
 
     @GET("user/foodstuff/add/form/{guid}?format=json")
     suspend fun getFoodForm(

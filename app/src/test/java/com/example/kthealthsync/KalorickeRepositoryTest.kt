@@ -174,36 +174,69 @@ class KalorickeRepositoryTest {
         assertTrue(calls.isEmpty())
     }
 
-    @Test fun myMealsLoadsAllPagesEvenWhenServerReturnsShortPages() = runTest {
+    @Test fun myMealsUsesPersonalListAndStopsAtReportedTotal() = runTest {
         val pages = mutableListOf<Int>()
         val repo = repository { method, args ->
-            check(method == "getMyMeals")
-            val page = args[0] as Int
+            check(method == "getMealList") { "Must not crawl the public autocomplete catalog" }
+            val page = args[3] as Int
+            assertEquals(50, args[4])
             pages += page
-            // Server caps each page at 30 despite our requested 50.
-            (page * 30 until minOf((page + 1) * 30, 125)).map {
-                AutocompleteResponseItem("$it", "Meal $it", null, null, null, null, null, null, null)
-            }
+            MealListResponse((page * 50 until minOf((page + 1) * 50, 80)).map {
+                MealListItem("$it", "Meal $it", "1 329")
+            }, count = 80)
+        }
+        val meals = repo.getAllMyMeals()
+        assertEquals((0 until 80).map { "$it" }, meals.map { it.id })
+        assertEquals(listOf(0, 1), pages)
+        assertTrue(meals.all { it.clazz == "meal" })
+        assertTrue("Total recipe energy must not be used as kcal per 100g", meals.all { it.value == null })
+    }
+
+    @Test fun personalMealsWithoutTotalContinuePastShortPages() = runTest {
+        val pages = mutableListOf<Int>()
+        val repo = repository { method, args ->
+            check(method == "getMealList")
+            val page = args[3] as Int
+            pages += page
+            MealListResponse((page * 30 until minOf((page + 1) * 30, 125)).map {
+                MealListItem("$it", "Meal $it", null)
+            })
         }
         assertEquals(125, repo.getAllMyMeals().size)
         assertEquals(listOf(0, 1, 2, 3, 4, 5), pages)
     }
 
     @Test fun repeatedMealPageFailsInsteadOfLoopingOrReturningPartialCache() = runTest {
-        val repo = repository { _, _ -> listOf(
-            AutocompleteResponseItem("one", "Meal", null, null, null, null, null, null, null)
-        ) }
+        val repo = repository { _, _ -> MealListResponse(listOf(MealListItem("one", "Meal", null)), 2) }
         assertTrue(runCatching { repo.getAllMyMeals() }.exceptionOrNull() is IllegalStateException)
         assertEquals(2, calls.size)
     }
 
+    @Test fun missingOrTruncatedMealPayloadFailsInsteadOfClearingCache() = runTest {
+        for (response in listOf(MealListResponse(null), MealListResponse(emptyList(), 80))) {
+            val repo = repository { _, _ -> response }
+            assertTrue(runCatching { repo.getAllMyMeals() }.isFailure)
+        }
+    }
+
     @Test fun laterMealPageFailureDoesNotReturnPartialList() = runTest {
         val repo = repository { _, args ->
-            if (args[0] == 0) listOf(
-                AutocompleteResponseItem("one", "Meal", null, null, null, null, null, null, null)
-            ) else throw IOException("offline")
+            if (args[3] == 0) MealListResponse(listOf(MealListItem("one", "Meal", null)), 2)
+            else throw IOException("offline")
         }
         assertTrue(runCatching { repo.getAllMyMeals() }.exceptionOrNull() is IOException)
+    }
+
+    @Test fun personalMealAdditionUsesItsOwnApiAndNeverRetriesAmbiguousWrites() = runTest {
+        val body = com.google.gson.JsonObject().apply { addProperty("guid", "meal") }
+        val failure = IOException("Response lost after write")
+        val repo = repository { method, args ->
+            assertEquals("addPersonalMeal", method)
+            assertSame(body, args[0])
+            throw failure
+        }
+        assertSame(failure, runCatching { repo.addPersonalMeal(body) }.exceptionOrNull())
+        assertEquals(listOf("addPersonalMeal"), calls)
     }
 
     private class MemoryPreferences : RepositoryPreferences {

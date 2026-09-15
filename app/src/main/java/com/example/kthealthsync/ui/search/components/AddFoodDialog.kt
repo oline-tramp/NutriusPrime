@@ -27,6 +27,8 @@ import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.round
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
+import com.example.kthealthsync.domain.model.PersonalMealForm
 
 private fun formatAmount(value: Double): String {
     if (abs(value - round(value)) < 1e-4) {
@@ -70,6 +72,8 @@ fun AddFoodDialog(
         mutableStateOf(initialMealTimeGuid ?: MealTimeUtils.getDefaultMealTimeGuid(date, timeOptions))
     }
 
+    val isPersonalMeal = item.clazz == "meal"
+    var personalMealForm by remember(item.id) { mutableStateOf<PersonalMealForm?>(null) }
     var isLoadingOptions by remember { mutableStateOf(true) }
     var isSubmitting by remember { mutableStateOf(false) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
@@ -84,27 +88,36 @@ fun AddFoodDialog(
 
     LaunchedEffect(Unit) {
         try {
-            val res = viewModel.getFoodForm(item.id!!)
-            val opts = res.data?.unitOptions ?: emptyList()
-            unitOptions = opts
+            if (isPersonalMeal) {
+                val form = viewModel.getPersonalMealForm(requireNotNull(item.id))
+                personalMealForm = form
+                unitOptions = form.units
+                selectedUnit = form.defaultUnit
+                amountText = formatAmount(form.defaultAmount)
+            } else {
+                val res = viewModel.getFoodForm(item.id!!)
+                val opts = res.data?.unitOptions ?: emptyList()
+                unitOptions = opts
 
-            if (opts.isNotEmpty()) {
-                val nonGramOpt = opts.firstOrNull { it.multiplier != 1.0 }
-                actualDefaultBaseAmount = nonGramOpt?.multiplier ?: 1.0
-                selectedUnit = opts.find { it.multiplier == 1.0 } ?: opts.first()
-            }
+                if (opts.isNotEmpty()) {
+                    val nonGramOpt = opts.firstOrNull { it.multiplier != 1.0 }
+                    actualDefaultBaseAmount = nonGramOpt?.multiplier ?: 1.0
+                    selectedUnit = opts.find { it.multiplier == 1.0 } ?: opts.first()
+                }
 
-            if (item.url != null) {
-                val macros = viewModel.getFoodMacros(item.url, res.data?.url)
-                proteinPer100 = macros["bílkoviny"] ?: 0.0
-                carbsPer100 = macros["sacharidy"] ?: 0.0
-                fatPer100 = macros["tuky"] ?: 0.0
-                fiberPer100 = macros["vláknina"] ?: 0.0
-                sugarPer100 = macros["cukry"] ?: 0.0
-                saltPer100 = macros["sůl"] ?: 0.0
+                if (item.url != null) {
+                    val macros = viewModel.getFoodMacros(item.url, res.data?.url)
+                    proteinPer100 = macros["bílkoviny"] ?: 0.0
+                    carbsPer100 = macros["sacharidy"] ?: 0.0
+                    fatPer100 = macros["tuky"] ?: 0.0
+                    fiberPer100 = macros["vláknina"] ?: 0.0
+                    sugarPer100 = macros["cukry"] ?: 0.0
+                    saltPer100 = macros["sůl"] ?: 0.0
+                }
             }
         } catch (e: Exception) {
-            errorMsg = "Failed to load form details"
+            if (e is CancellationException) throw e
+            errorMsg = e.message ?: "Failed to load form details"
         } finally {
             isLoadingOptions = false
         }
@@ -195,6 +208,7 @@ fun AddFoodDialog(
                                             text = { Text(opt.title ?: "") },
                                             onClick = {
                                                 selectedUnit = opt
+                                                personalMealForm?.let { amountText = formatAmount(it.suggestedAmount(opt)) }
                                                 unitExpanded = false
                                             }
                                         )
@@ -243,13 +257,15 @@ fun AddFoodDialog(
                         }
                     }
 
-                    val itemKcal = item.value?.replace(Regex("[^0-9.]"), "")?.toDoubleOrNull() ?: 0.0
+                    val itemKcal = item.value?.replace(',', '.')?.replace(Regex("[^0-9.]"), "")?.toDoubleOrNull() ?: 0.0
                     val mult = selectedUnit?.multiplier ?: 1.0
                     val pVal = if (mult == 1.0) actualDefaultBaseAmount else 1.0
                     val inputVal = amountText.replace(',', '.').toDoubleOrNull() ?: pVal
 
                     val factor = (inputVal * mult) / 100.0
-                    val addedKcal = factor * itemKcal
+                    val addedKcal = personalMealForm?.let { form ->
+                        runCatching { form.portion(requireNotNull(selectedUnit?.id), inputVal, date, selectedTimeGuid).kcal }.getOrDefault(0.0)
+                    } ?: (factor * itemKcal)
 
                     Row(
                         modifier = Modifier
@@ -271,7 +287,10 @@ fun AddFoodDialog(
                         )
                     }
 
-                    if (showImpactPreview) {
+                    if (showImpactPreview && isPersonalMeal) {
+                        CircularImpactIndicator(title = strings.energy, current = currentKcal, added = addedKcal, max = nutrientGoals.kcal, unit = strings.kcalUnit, color = Color(0xFFFFCA28))
+                    }
+                    if (showImpactPreview && !isPersonalMeal) {
                         Column(modifier = Modifier.fillMaxWidth()) {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                                 CircularImpactIndicator(title = strings.energy, current = currentKcal, added = addedKcal, max = nutrientGoals.kcal, unit = strings.kcalUnit, color = Color(0xFFFFCA28))
@@ -307,8 +326,9 @@ fun AddFoodDialog(
                             val inputVal = amountText.replace(',', '.').toDoubleOrNull() ?: pVal
                             val finalAmount = formatAmount(inputVal * mult)
                             val factor = (inputVal * mult) / 100.0
-                            val itemKcal = item.value?.replace(Regex("[^0-9.]"), "")?.toDoubleOrNull() ?: 0.0
-                            val addedKcal = factor * itemKcal
+                            val itemKcal = item.value?.replace(',', '.')?.replace(Regex("[^0-9.]"), "")?.toDoubleOrNull() ?: 0.0
+                            val mealPortion = personalMealForm?.portion(requireNotNull(selectedUnit?.id), inputVal, date, selectedTimeGuid)
+                            val addedKcal = mealPortion?.kcal ?: (factor * itemKcal)
 
                             val request = AddFoodRequest(
                                 guid = item.id!!,
@@ -318,7 +338,8 @@ fun AddFoodDialog(
                                 multiplier = finalAmount,
                                 diaryTimeGuid = selectedTimeGuid
                             )
-                            val response = viewModel.addFood(request)
+                            val response = if (mealPortion != null) viewModel.addPersonalMeal(mealPortion.request)
+                                else viewModel.addFood(request)
                             if (response.code == 0) {
                                 val addedInfo = AddedFoodInfo(
                                     title = item.title ?: "",
@@ -343,7 +364,8 @@ fun AddFoodDialog(
                         }
                     }
                 },
-                enabled = !isSubmitting && !isLoadingOptions
+                enabled = !isSubmitting && !isLoadingOptions && selectedUnit != null &&
+                    (!isPersonalMeal || (personalMealForm != null && amountText.replace(',', '.').toDoubleOrNull()?.let { it.isFinite() && it > 0 } == true))
             ) {
                 if (isSubmitting) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), color = MaterialTheme.colorScheme.onPrimary)

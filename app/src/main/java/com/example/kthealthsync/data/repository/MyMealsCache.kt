@@ -17,7 +17,13 @@ internal class MyMealsCache(
     private val _meals = MutableStateFlow<List<AutocompleteResponseItem>>(emptyList())
     val meals = _meals.asStateFlow()
 
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing = _isRefreshing.asStateFlow()
+    private val _error = MutableStateFlow<String?>(null)
+    val error = _error.asStateFlow()
+
     fun clear() {
+        _error.value = null
         _meals.value = emptyList()
     }
 
@@ -25,15 +31,20 @@ internal class MyMealsCache(
     suspend fun refreshWhileActive() {
         while (true) {
             val startedAt = nowMillis()
+            _isRefreshing.value = true
             try {
                 val updated = loadMeals()
                 currentCoroutineContext().ensureActive()
                 _meals.value = updated
+                _error.value = null
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 currentCoroutineContext().ensureActive()
+                _error.value = e.message ?: "Failed to refresh personal meals"
                 onError(e)
+            } finally {
+                _isRefreshing.value = false
             }
             delay((20_000L - (nowMillis() - startedAt)).coerceAtLeast(1L))
         }

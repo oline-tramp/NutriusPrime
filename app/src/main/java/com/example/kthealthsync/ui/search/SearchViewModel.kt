@@ -32,10 +32,16 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
 
     private val _results = MutableStateFlow<List<AutocompleteResponseItem>>(emptyList())
     private val mealsCache = MyMealsCache(
-        loadMeals = repository::getAllMyMeals,
+        loadMeals = {
+            repository.getAllMyMeals().also {
+                DebugLogger.addActionLog("Personal meals cache refreshed: ${it.size} meals")
+            }
+        },
         onError = { DebugLogger.addActionLog("Refresh my meals failed: ${it.message}") }
     )
     val myMeals = mealsCache.meals
+    val isRefreshingMeals = mealsCache.isRefreshing
+    val mealsError = mealsCache.error
     private var mealsAccount: String? = null
     val results: StateFlow<List<AutocompleteResponseItem>> = combine(_results, myMeals, _query) { remote, meals, query ->
         if (query.length < 3) emptyList()
@@ -284,6 +290,10 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
             onFinally = { _isLoadingMore.value = false }
         )
     }
+
+    suspend fun getPersonalMealForm(guid: String) = repository.getPersonalMealForm(guid)
+
+    suspend fun addPersonalMeal(request: com.google.gson.JsonObject) = repository.addPersonalMeal(request)
 
     suspend fun getFoodForm(guid: String): FoodFormResponse {
         return repository.getFoodForm(guid)
