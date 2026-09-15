@@ -1,7 +1,11 @@
 package com.example.kthealthsync
 
 import com.example.kthealthsync.domain.model.FoodCategory
-import com.example.kthealthsync.domain.util.NutrientUtils
+import com.example.kthealthsync.domain.util.FoodHtmlParser
+import com.example.kthealthsync.domain.util.NutrientCalculator
+import com.example.kthealthsync.domain.util.NutrientParser
+import java.io.File
+import java.util.Properties
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -9,8 +13,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.experimental.categories.Category
-import java.io.File
-import java.util.Properties
 
 @Category(LiveNetworkTest::class)
 class KalorickeIntegrationTest {
@@ -79,8 +81,8 @@ class KalorickeIntegrationTest {
         val recipeData = api.getRecipeDetail(borshGuid!!, cookie).data
         assertNotNull("Failed to fetch recipe details for Borsh!", recipeData)
         
-        val recipeEnergy = NutrientUtils.parseNutrient(recipeData!!.energy)
-        val loggedEnergy = NutrientUtils.parseNutrient(borshRaw.energy)
+        val recipeEnergy = NutrientParser.parseNutrient(recipeData!!.energy)
+        val loggedEnergy = NutrientParser.parseNutrient(borshRaw.energy)
         println("Recipe total energy: $recipeEnergy kcal. Logged energy: $loggedEnergy kcal")
         
         val scale = if (recipeEnergy > 0) loggedEnergy / recipeEnergy else 1.0
@@ -90,14 +92,14 @@ class KalorickeIntegrationTest {
             val compFood = item.foodstuff
             if (compFood != null) {
                 compFood.copy(
-                    protein = NutrientUtils.scaleNutrient(compFood.protein, scale),
-                    fat = NutrientUtils.scaleNutrient(compFood.fat, scale),
-                    carbohydrate = NutrientUtils.scaleNutrient(compFood.carbohydrate, scale),
-                    sugar = NutrientUtils.scaleNutrient(compFood.sugar, scale),
-                    salt = NutrientUtils.scaleNutrient(compFood.salt, scale),
-                    fiber = NutrientUtils.scaleNutrient(compFood.fiber, scale),
-                    water = NutrientUtils.scaleNutrient(compFood.water, scale),
-                    energy = NutrientUtils.scaleNutrient(compFood.energy, scale)
+                    protein = NutrientCalculator.scaleNutrient(compFood.protein, scale),
+                    fat = NutrientCalculator.scaleNutrient(compFood.fat, scale),
+                    carbohydrate = NutrientCalculator.scaleNutrient(compFood.carbohydrate, scale),
+                    sugar = NutrientCalculator.scaleNutrient(compFood.sugar, scale),
+                    salt = NutrientCalculator.scaleNutrient(compFood.salt, scale),
+                    fiber = NutrientCalculator.scaleNutrient(compFood.fiber, scale),
+                    water = NutrientCalculator.scaleNutrient(compFood.water, scale),
+                    energy = NutrientCalculator.scaleNutrient(compFood.energy, scale)
                 )
             } else null
         }
@@ -106,7 +108,7 @@ class KalorickeIntegrationTest {
         
         // 6. Test aggregation
         val allFoods = listOf(enrichedBorsh)
-        val proteinBreakdown = NutrientUtils.aggregateMacro(allFoods, { NutrientUtils.parseNutrient(it.protein) }, withMeals = true)
+        val proteinBreakdown = NutrientCalculator.aggregateMacro(allFoods, { NutrientParser.parseNutrient(it.protein) }, withMeals = true)
         
         println("Protein Breakdown:")
         proteinBreakdown.forEach { breakdown ->
@@ -117,7 +119,7 @@ class KalorickeIntegrationTest {
         }
         
         val totalBorshProteinFromComponents = proteinBreakdown.first().components.sumOf { it.amount }
-        val borshLoggedProtein = NutrientUtils.parseNutrient(borshRaw.protein)
+        val borshLoggedProtein = NutrientParser.parseNutrient(borshRaw.protein)
         
         println("Borsh logged protein: $borshLoggedProtein. Sum of components: $totalBorshProteinFromComponents")
         
@@ -200,8 +202,8 @@ class KalorickeIntegrationTest {
                     val htmlUrl = "https://www.kaloricketabulky.cz/$fullUrl"
                     try {
                         val html = api.getFoodHtml(htmlUrl, cookie).string()
-                        val category = NutrientUtils.parseCategoryFromHtml(html, f.title ?: f.name ?: f.nazev)
-                        val count = if (category == FoodCategory.SUPPLEMENT) NutrientUtils.parseSupplementCount(f.unit) else 0.0
+                        val category = FoodHtmlParser.parseCategoryFromHtml(html, f.title ?: f.name ?: f.nazev)
+                        val count = if (category == FoodCategory.SUPPLEMENT) NutrientParser.parseSupplementCount(f.unit) else 0.0
                         println("  -> category=$category, count=$count")
                     } catch (e: Exception) {
                         println("  -> getFoodHtml error: ${e.message}")

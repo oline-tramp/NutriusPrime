@@ -21,12 +21,12 @@ import com.example.kthealthsync.*
 import com.example.kthealthsync.domain.model.AddedFoodInfo
 import com.example.kthealthsync.domain.model.LocalAppStrings
 import com.example.kthealthsync.domain.model.NutrientGoals
-import com.example.kthealthsync.domain.util.NutrientUtils
+import com.example.kthealthsync.domain.util.MealTimeUtils
 import com.example.kthealthsync.ui.search.SearchViewModel
-import kotlinx.coroutines.launch
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.round
+import kotlinx.coroutines.launch
 
 private fun formatAmount(value: Double): String {
     if (abs(value - round(value)) < 1e-4) {
@@ -60,14 +60,14 @@ fun AddFoodDialog(
     val strings = LocalAppStrings.current
     val coroutineScope = rememberCoroutineScope()
 
-    val timeOptions = remember(strings) { NutrientUtils.getStandardMealOptions(strings) }
+    val timeOptions = remember(strings) { MealTimeUtils.getStandardMealOptions(strings) }
 
     var unitOptions by remember { mutableStateOf<List<FoodFormUnitOption>>(emptyList()) }
     var selectedUnit by remember { mutableStateOf<FoodFormUnitOption?>(null) }
     var amountText by remember { mutableStateOf("") }
     var actualDefaultBaseAmount by remember { mutableStateOf(1.0) }
     var selectedTimeGuid by remember(date, initialMealTimeGuid) {
-        mutableStateOf(initialMealTimeGuid ?: NutrientUtils.getDefaultMealTimeGuid(date, timeOptions))
+        mutableStateOf(initialMealTimeGuid ?: MealTimeUtils.getDefaultMealTimeGuid(date, timeOptions))
     }
 
     var isLoadingOptions by remember { mutableStateOf(true) }

@@ -17,7 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.kthealthsync.domain.model.LocalAppStrings
-import com.example.kthealthsync.domain.util.NutrientUtils
+import com.example.kthealthsync.domain.util.MealTimeUtils
 import java.time.LocalDate
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
@@ -34,7 +34,7 @@ fun CloneEntriesDialog(
     val context = LocalContext.current
     var selectedMealTimeId by remember { mutableStateOf("1") }
     var mealExpanded by remember { mutableStateOf(false) }
-    val mealOptions = remember(strings) { NutrientUtils.getStandardMealOptions(strings) }
+    val mealOptions = remember(strings) { MealTimeUtils.getStandardMealOptions(strings) }
     var targetDate by remember { mutableStateOf(currentDate.toLocalDate()) }
     val formatter = remember { DateTimeFormatter.ofPattern("dd.MM.yyyy") }
 

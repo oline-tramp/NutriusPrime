@@ -28,14 +28,15 @@ import com.example.kthealthsync.UnitOption
 import com.example.kthealthsync.domain.model.DiaryEditResult
 import com.example.kthealthsync.domain.model.LocalAppStrings
 import com.example.kthealthsync.domain.model.NutrientGoals
-import com.example.kthealthsync.domain.util.NutrientUtils
-import kotlinx.coroutines.launch
+import com.example.kthealthsync.domain.util.MealTimeUtils
+import com.example.kthealthsync.domain.util.NutrientParser
 import java.time.LocalDate
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.round
+import kotlinx.coroutines.launch
 
 private fun formatAmount(value: Double): String {
     if (abs(value - round(value)) < 1e-4) {
@@ -73,7 +74,7 @@ private fun parseInitialAmountAndUnit(unitStr: String?): Pair<String, String?> {
     }
 
     // 3. Fallback: extract portion grams
-    val g = NutrientUtils.parsePortionGrams(unitStr)
+    val g = NutrientParser.parsePortionGrams(unitStr)
     if (g > 0) {
         val gStr = if (g == g.toInt().toDouble()) g.toInt().toString() else String.format(Locale.US, "%.1f", g)
         return gStr to "g"
@@ -99,7 +100,7 @@ fun EditFoodDialog(
     val coroutineScope = rememberCoroutineScope()
     val formatter = remember { DateTimeFormatter.ofPattern("dd.MM.yyyy") }
 
-    val timeOptions = remember(strings) { NutrientUtils.getStandardMealOptions(strings) }
+    val timeOptions = remember(strings) { MealTimeUtils.getStandardMealOptions(strings) }
 
     val (parsedInitAmount, parsedInitUnit) = remember(food.unit) {
         parseInitialAmountAndUnit(food.unit)
@@ -140,28 +141,28 @@ fun EditFoodDialog(
 
     // Macro density base per 100g
     val portionGrams = remember(food.unit) {
-        NutrientUtils.parsePortionGrams(food.unit).coerceAtLeast(1.0)
+        NutrientParser.parsePortionGrams(food.unit).coerceAtLeast(1.0)
     }
     var energyPer100 by remember {
-        mutableDoubleStateOf(NutrientUtils.parseNutrient(food.energy) / portionGrams * 100.0)
+        mutableDoubleStateOf(NutrientParser.parseNutrient(food.energy) / portionGrams * 100.0)
     }
     var proteinPer100 by remember {
-        mutableDoubleStateOf(NutrientUtils.parseNutrient(food.protein) / portionGrams * 100.0)
+        mutableDoubleStateOf(NutrientParser.parseNutrient(food.protein) / portionGrams * 100.0)
     }
     var carbsPer100 by remember {
-        mutableDoubleStateOf(NutrientUtils.parseNutrient(food.carbohydrate) / portionGrams * 100.0)
+        mutableDoubleStateOf(NutrientParser.parseNutrient(food.carbohydrate) / portionGrams * 100.0)
     }
     var fatPer100 by remember {
-        mutableDoubleStateOf(NutrientUtils.parseNutrient(food.fat) / portionGrams * 100.0)
+        mutableDoubleStateOf(NutrientParser.parseNutrient(food.fat) / portionGrams * 100.0)
     }
     var fiberPer100 by remember {
-        mutableDoubleStateOf(NutrientUtils.parseNutrient(food.fiber) / portionGrams * 100.0)
+        mutableDoubleStateOf(NutrientParser.parseNutrient(food.fiber) / portionGrams * 100.0)
     }
     var sugarPer100 by remember {
-        mutableDoubleStateOf(NutrientUtils.parseNutrient(food.sugar) / portionGrams * 100.0)
+        mutableDoubleStateOf(NutrientParser.parseNutrient(food.sugar) / portionGrams * 100.0)
     }
     var saltPer100 by remember {
-        mutableDoubleStateOf(NutrientUtils.parseNutrient(food.salt) / portionGrams * 100.0)
+        mutableDoubleStateOf(NutrientParser.parseNutrient(food.salt) / portionGrams * 100.0)
     }
 
     val productGuid = food.guidType ?: food.guid ?: food.guidRecipe ?: ""

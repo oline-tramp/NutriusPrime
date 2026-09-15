@@ -28,6 +28,22 @@ Outputs:
 
 Lint errors fail the build. Warnings are reported without blocking it. Fragment is constrained to 1.6.2 because the barcode scanner otherwise pulls in 1.0.0, which is incompatible with the Activity Result APIs used by the app. This version fits the current SDK 34 dependency stack.
 
+## Domain logic
+
+The objects in `app/src/main/java/com/example/kthealthsync/domain/util/` have separate responsibilities:
+
+| Object | Responsibility |
+| --- | --- |
+| `NutrientParser` | Numeric nutrient values, portion weights and supplement counts |
+| `NutrientCalculator` | Scaling, salt-to-sodium conversion and recursive nutrient totals |
+| `HydrationCalculator` | Liquid volumes and food-specific hydration rules |
+| `FoodHtmlParser` | Nutrients and categories from Kalorické Tabulky HTML |
+| `DailyShareFormatter` | Daily reports, food lists, JSON and nutrition prompts |
+| `WhoopPromptFormatter` | Whoop Journal prompt generation |
+| `MealTimeUtils` | Default meal slots and localized meal names |
+
+Each object has a corresponding JVM test class. UI and repository code call the responsible object directly.
+
 ## Live API tests
 
 Tests annotated with `@Category(LiveNetworkTest::class)` are excluded from normal unit test tasks. Run them explicitly:

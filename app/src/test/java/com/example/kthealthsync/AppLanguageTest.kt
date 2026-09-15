@@ -2,7 +2,7 @@ package com.example.kthealthsync
 
 import com.example.kthealthsync.domain.model.AppLanguage
 import com.example.kthealthsync.domain.model.getAppStrings
-import com.example.kthealthsync.domain.util.NutrientUtils
+import com.example.kthealthsync.domain.util.MealTimeUtils
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -37,7 +37,7 @@ class AppLanguageTest {
             foodstuff = emptyList()
         )
         // Even with RU strings, KT's meal title from diary should be preserved!
-        assertEquals("Snídaně", NutrientUtils.getMealTimeDisplayName(csMeal, ruStrings))
+        assertEquals("Snídaně", MealTimeUtils.getMealTimeDisplayName(csMeal, ruStrings))
 
         // When title & name are null, fallback to localized name
         val fallbackMeal = MealTime(
@@ -46,21 +46,21 @@ class AppLanguageTest {
             name = null,
             foodstuff = emptyList()
         )
-        assertEquals("Завтрак", NutrientUtils.getMealTimeDisplayName(fallbackMeal, ruStrings))
+        assertEquals("Завтрак", MealTimeUtils.getMealTimeDisplayName(fallbackMeal, ruStrings))
         val csStrings = getAppStrings(AppLanguage.CS)
-        assertEquals("Snídaně", NutrientUtils.getMealTimeDisplayName(fallbackMeal, csStrings))
+        assertEquals("Snídaně", MealTimeUtils.getMealTimeDisplayName(fallbackMeal, csStrings))
     }
 
     @Test
     fun testStandardMealOptionsLocalized() {
         val csStrings = getAppStrings(AppLanguage.CS)
-        val csOptions = NutrientUtils.getStandardMealOptions(csStrings)
+        val csOptions = MealTimeUtils.getStandardMealOptions(csStrings)
         assertEquals("Snídaně", csOptions.find { it.first == "1" }?.second)
         assertEquals("Oběd", csOptions.find { it.first == "3" }?.second)
         assertEquals("Večeře", csOptions.find { it.first == "5" }?.second)
 
         val enStrings = getAppStrings(AppLanguage.EN)
-        val enOptions = NutrientUtils.getStandardMealOptions(enStrings)
+        val enOptions = MealTimeUtils.getStandardMealOptions(enStrings)
         assertEquals("Breakfast", enOptions.find { it.first == "1" }?.second)
         assertEquals("Lunch", enOptions.find { it.first == "3" }?.second)
         assertEquals("Dinner", enOptions.find { it.first == "5" }?.second)

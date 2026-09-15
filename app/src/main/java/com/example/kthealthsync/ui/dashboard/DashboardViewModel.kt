@@ -5,17 +5,25 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.kthealthsync.AddFoodRequest
-import com.example.kthealthsync.FoodFormResponse
-import com.example.kthealthsync.UnitOption
 import com.example.kthealthsync.DebugLogger
 import com.example.kthealthsync.DiaryResponse
+import com.example.kthealthsync.FoodFormResponse
 import com.example.kthealthsync.Foodstuff
 import com.example.kthealthsync.PreferencesManager
+import com.example.kthealthsync.UnitOption
 import com.example.kthealthsync.data.repository.KalorickeRepository
 import com.example.kthealthsync.domain.model.DailySummary
+import com.example.kthealthsync.domain.model.DiaryEditResult
 import com.example.kthealthsync.domain.model.NutrientGoals
-import com.example.kthealthsync.domain.util.NutrientUtils
+import com.example.kthealthsync.domain.util.HydrationCalculator
+import com.example.kthealthsync.domain.util.NutrientParser
+import com.example.kthealthsync.sync.DailySummaryRecords
 import com.example.kthealthsync.sync.HealthConnectManager
+import com.example.kthealthsync.ui.LatestRequest
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+import java.util.Locale
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -23,13 +31,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.CancellationException
-import com.example.kthealthsync.ui.LatestRequest
-import com.example.kthealthsync.sync.DailySummaryRecords
-import com.example.kthealthsync.domain.model.DiaryEditResult
-import java.time.ZonedDateTime
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 sealed interface DashboardUiState {
     data object Loading : DashboardUiState
@@ -329,7 +330,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     val guid = food.guidType ?: food.guid
                     if (guid.isNullOrBlank()) continue
 
-                    val portion = NutrientUtils.parsePortionGrams(food.unit).coerceAtLeast(1.0)
+                    val portion = NutrientParser.parsePortionGrams(food.unit).coerceAtLeast(1.0)
                     val multStr = if (portion == portion.toInt().toDouble()) portion.toInt().toString() else String.format(Locale.US, "%.1f", portion)
 
                     val request = AddFoodRequest(
@@ -372,14 +373,14 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         var dFiber = 0.0
 
         for (f in removedFoods) {
-            dKcal += NutrientUtils.parseNutrient(f.energy)
-            dProt += NutrientUtils.parseNutrient(f.protein)
-            dFat += NutrientUtils.parseNutrient(f.fat)
-            dCarb += NutrientUtils.parseNutrient(f.carbohydrate)
-            dSugar += NutrientUtils.parseNutrient(f.sugar)
-            dSalt += NutrientUtils.parseNutrient(f.salt)
-            dWater += NutrientUtils.parseLiquidVolumeMl(f)
-            dFiber += NutrientUtils.parseNutrient(f.fiber)
+            dKcal += NutrientParser.parseNutrient(f.energy)
+            dProt += NutrientParser.parseNutrient(f.protein)
+            dFat += NutrientParser.parseNutrient(f.fat)
+            dCarb += NutrientParser.parseNutrient(f.carbohydrate)
+            dSugar += NutrientParser.parseNutrient(f.sugar)
+            dSalt += NutrientParser.parseNutrient(f.salt)
+            dWater += HydrationCalculator.parseLiquidVolumeMl(f)
+            dFiber += NutrientParser.parseNutrient(f.fiber)
         }
 
         return currentSummary.copy(

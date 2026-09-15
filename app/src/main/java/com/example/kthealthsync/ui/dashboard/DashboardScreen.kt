@@ -4,7 +4,6 @@ import android.app.DatePickerDialog
 import android.content.Intent
 import android.util.Log
 import android.widget.Toast
-import com.example.kthealthsync.DebugLogger
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -23,21 +22,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.boundsInRoot
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.zIndex
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
@@ -57,19 +41,35 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
+import com.example.kthealthsync.DebugLogger
 import com.example.kthealthsync.DiaryResponse
 import com.example.kthealthsync.Foodstuff
 import com.example.kthealthsync.MealTime
@@ -77,7 +77,9 @@ import com.example.kthealthsync.domain.model.DailySummary
 import com.example.kthealthsync.domain.model.FoodBreakdown
 import com.example.kthealthsync.domain.model.LocalAppStrings
 import com.example.kthealthsync.domain.model.ShareFormatType
-import com.example.kthealthsync.domain.util.NutrientUtils
+import com.example.kthealthsync.domain.util.DailyShareFormatter
+import com.example.kthealthsync.domain.util.MealTimeUtils
+import com.example.kthealthsync.domain.util.NutrientParser
 import java.time.LocalDate
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
@@ -239,7 +241,7 @@ fun DashboardScreen(
                     dateDisplay = dateDisplay,
                     onDismiss = { showShareDialog = false },
                     onOptionSelected = { format, copyOnly ->
-                        val shareText = NutrientUtils.formatDailyShareText(
+                        val shareText = DailyShareFormatter.formatDailyShareText(
                             type = format,
                             dateStr = dateDisplay,
                             summary = state.summary,
@@ -1216,7 +1218,7 @@ fun DailyDiarySpoiler(
         mealTimes.flatMap { it.foodstuff ?: emptyList() }
     }
     val totalKcal = remember(allFoods) {
-        allFoods.sumOf { NutrientUtils.parseNutrient(it.energy) }
+        allFoods.sumOf { NutrientParser.parseNutrient(it.energy) }
     }
 
     var prevTotalFoodCount by remember(dateStr) { mutableIntStateOf(allFoods.size) }
@@ -1466,7 +1468,7 @@ fun DailyDiarySpoiler(
             val spoilerRoot = spoilerCoordinates?.localToRoot(Offset.Zero) ?: Offset.Zero
             val localOffset = dragInfo.rootPointer - spoilerRoot
             val title = dragInfo.food.title ?: dragInfo.food.name ?: dragInfo.food.nazev ?: strings.unnamedFood
-            val kcal = NutrientUtils.parseNutrient(dragInfo.food.energy).toInt()
+            val kcal = NutrientParser.parseNutrient(dragInfo.food.energy).toInt()
             val isCloneAction = currentDropAction == DropAction.CLONE
             val isTargetValid = when {
                 hoveredMealId == null -> false
@@ -1573,10 +1575,10 @@ fun MealTimeGroup(
     }
     val strings = LocalAppStrings.current
     val mealKcal = remember(foods) {
-        foods.sumOf { NutrientUtils.parseNutrient(it.energy) }
+        foods.sumOf { NutrientParser.parseNutrient(it.energy) }
     }
     val mealDisplayName = remember(mealTime, strings) {
-        NutrientUtils.getMealTimeDisplayName(mealTime, strings)
+        MealTimeUtils.getMealTimeDisplayName(mealTime, strings)
     }
 
     Card(
@@ -1824,10 +1826,10 @@ fun FoodEntryRow(
 ) {
     val strings = LocalAppStrings.current
     val title = food.title ?: food.name ?: food.nazev ?: strings.unnamedFood
-    val energyKcal = NutrientUtils.parseNutrient(food.energy).toInt()
-    val protein = NutrientUtils.parseNutrient(food.protein).toInt()
-    val fat = NutrientUtils.parseNutrient(food.fat).toInt()
-    val carbs = NutrientUtils.parseNutrient(food.carbohydrate).toInt()
+    val energyKcal = NutrientParser.parseNutrient(food.energy).toInt()
+    val protein = NutrientParser.parseNutrient(food.protein).toInt()
+    val fat = NutrientParser.parseNutrient(food.fat).toInt()
+    val carbs = NutrientParser.parseNutrient(food.carbohydrate).toInt()
 
     var handleCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val haptic = LocalHapticFeedback.current
@@ -2040,7 +2042,7 @@ fun MoveEntriesDialog(
     val context = LocalContext.current
     var selectedMealTimeId by remember { mutableStateOf("1") }
     var mealExpanded by remember { mutableStateOf(false) }
-    val mealOptions = remember(strings) { NutrientUtils.getStandardMealOptions(strings) }
+    val mealOptions = remember(strings) { MealTimeUtils.getStandardMealOptions(strings) }
     var targetDate by remember { mutableStateOf(currentDate.toLocalDate()) }
     val formatter = remember { DateTimeFormatter.ofPattern("dd.MM.yyyy") }
 

@@ -2,17 +2,20 @@ package com.example.kthealthsync.data.repository
 
 import com.example.kthealthsync.*
 import com.example.kthealthsync.domain.model.DailySummary
-import com.example.kthealthsync.domain.model.FoodCategory
-import com.example.kthealthsync.domain.util.NutrientUtils
-import kotlinx.coroutines.CancellationException
 import com.example.kthealthsync.domain.model.DiaryEditResult
+import com.example.kthealthsync.domain.model.FoodCategory
+import com.example.kthealthsync.domain.util.FoodHtmlParser
+import com.example.kthealthsync.domain.util.HydrationCalculator
+import com.example.kthealthsync.domain.util.NutrientCalculator
+import com.example.kthealthsync.domain.util.NutrientParser
+import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
-import java.util.Locale
-import java.util.concurrent.ConcurrentHashMap
 
 class KalorickeRepository(
     private val api: KalorickeApiService = RetrofitClient.instance,
@@ -128,25 +131,25 @@ class KalorickeRepository(
             if (guid != null && (mealMap.containsValue(guid) || mealMap.containsKey(name))) {
                 val recipeData = getRecipeDetail(guid, cookie)
                 if (recipeData != null) {
-                    val recipeEnergy = NutrientUtils.parseNutrient(recipeData.energy)
-                    val loggedEnergy = NutrientUtils.parseNutrient(f.energy)
+                    val recipeEnergy = NutrientParser.parseNutrient(recipeData.energy)
+                    val loggedEnergy = NutrientParser.parseNutrient(f.energy)
                     val scale = if (recipeEnergy > 0) loggedEnergy / recipeEnergy else 1.0
 
                     val components = recipeData.content?.mapNotNull { item ->
                         item.foodstuff?.let { compFood ->
                             val origUnit = item.unit ?: compFood.unit
-                            val origGrams = NutrientUtils.parsePortionGrams(origUnit)
+                            val origGrams = NutrientParser.parsePortionGrams(origUnit)
                             val scaledUnit = if (origGrams > 0) "${String.format(Locale.US, "%.1f", origGrams * scale)} g" else origUnit
                             compFood.copy(
                                 unit = scaledUnit,
-                                protein = NutrientUtils.scaleNutrient(compFood.protein, scale),
-                                fat = NutrientUtils.scaleNutrient(compFood.fat, scale),
-                                carbohydrate = NutrientUtils.scaleNutrient(compFood.carbohydrate, scale),
-                                sugar = NutrientUtils.scaleNutrient(compFood.sugar, scale),
-                                salt = NutrientUtils.scaleNutrient(compFood.salt, scale),
-                                fiber = NutrientUtils.scaleNutrient(compFood.fiber, scale),
-                                water = NutrientUtils.scaleNutrient(compFood.water, scale),
-                                energy = NutrientUtils.scaleNutrient(compFood.energy, scale)
+                                protein = NutrientCalculator.scaleNutrient(compFood.protein, scale),
+                                fat = NutrientCalculator.scaleNutrient(compFood.fat, scale),
+                                carbohydrate = NutrientCalculator.scaleNutrient(compFood.carbohydrate, scale),
+                                sugar = NutrientCalculator.scaleNutrient(compFood.sugar, scale),
+                                salt = NutrientCalculator.scaleNutrient(compFood.salt, scale),
+                                fiber = NutrientCalculator.scaleNutrient(compFood.fiber, scale),
+                                water = NutrientCalculator.scaleNutrient(compFood.water, scale),
+                                energy = NutrientCalculator.scaleNutrient(compFood.energy, scale)
                             )
                         }
                     }
@@ -176,31 +179,31 @@ class KalorickeRepository(
         var sugar = 0.0; var salt = 0.0; var water = 0.0; var fiber = 0.0
 
         for (f in allFoodstuffs) {
-            kcal += NutrientUtils.parseNutrient(f.energy)
-            prot += NutrientUtils.parseNutrient(f.protein)
-            fat += NutrientUtils.parseNutrient(f.fat)
-            carb += NutrientUtils.parseNutrient(f.carbohydrate)
-            sugar += NutrientUtils.parseNutrient(f.sugar)
-            salt += NutrientUtils.parseNutrient(f.salt)
-            water += NutrientUtils.parseLiquidVolumeMl(f)
-            fiber += NutrientUtils.parseNutrient(f.fiber)
+            kcal += NutrientParser.parseNutrient(f.energy)
+            prot += NutrientParser.parseNutrient(f.protein)
+            fat += NutrientParser.parseNutrient(f.fat)
+            carb += NutrientParser.parseNutrient(f.carbohydrate)
+            sugar += NutrientParser.parseNutrient(f.sugar)
+            salt += NutrientParser.parseNutrient(f.salt)
+            water += HydrationCalculator.parseLiquidVolumeMl(f)
+            fiber += NutrientParser.parseNutrient(f.fiber)
         }
 
-        val vegBreakdown = NutrientUtils.aggregateMacro(allFoodstuffs, { f ->
-            if (getFoodCategorySync(f) == FoodCategory.VEGETABLE) NutrientUtils.parsePortionGrams(f.unit) else 0.0
+        val vegBreakdown = NutrientCalculator.aggregateMacro(allFoodstuffs, { f ->
+            if (getFoodCategorySync(f) == FoodCategory.VEGETABLE) NutrientParser.parsePortionGrams(f.unit) else 0.0
         }, withMeals)
 
-        val fruitBreakdown = NutrientUtils.aggregateMacro(allFoodstuffs, { f ->
-            if (getFoodCategorySync(f) == FoodCategory.FRUIT) NutrientUtils.parsePortionGrams(f.unit) else 0.0
+        val fruitBreakdown = NutrientCalculator.aggregateMacro(allFoodstuffs, { f ->
+            if (getFoodCategorySync(f) == FoodCategory.FRUIT) NutrientParser.parsePortionGrams(f.unit) else 0.0
         }, withMeals)
 
-        val vegFruitBreakdown = NutrientUtils.aggregateMacro(allFoodstuffs, { f ->
+        val vegFruitBreakdown = NutrientCalculator.aggregateMacro(allFoodstuffs, { f ->
             val cat = getFoodCategorySync(f)
-            if (cat == FoodCategory.VEGETABLE || cat == FoodCategory.FRUIT) NutrientUtils.parsePortionGrams(f.unit) else 0.0
+            if (cat == FoodCategory.VEGETABLE || cat == FoodCategory.FRUIT) NutrientParser.parsePortionGrams(f.unit) else 0.0
         }, withMeals)
 
-        val supplementBreakdown = NutrientUtils.aggregateMacro(allFoodstuffs, { f ->
-            if (getFoodCategorySync(f) == FoodCategory.SUPPLEMENT) NutrientUtils.parseSupplementCount(f.unit) else 0.0
+        val supplementBreakdown = NutrientCalculator.aggregateMacro(allFoodstuffs, { f ->
+            if (getFoodCategorySync(f) == FoodCategory.SUPPLEMENT) NutrientParser.parseSupplementCount(f.unit) else 0.0
         }, withMeals)
 
         val vegGrams = vegBreakdown.sumOf { it.amount }
@@ -217,14 +220,14 @@ class KalorickeRepository(
             water = water,
             fiber = fiber,
             date = dateStr,
-            kcalBreakdown = NutrientUtils.aggregateMacro(allFoodstuffs, { NutrientUtils.parseNutrient(it.energy) }, withMeals),
-            proteinBreakdown = NutrientUtils.aggregateMacro(allFoodstuffs, { NutrientUtils.parseNutrient(it.protein) }, withMeals),
-            fatBreakdown = NutrientUtils.aggregateMacro(allFoodstuffs, { NutrientUtils.parseNutrient(it.fat) }, withMeals),
-            carbBreakdown = NutrientUtils.aggregateMacro(allFoodstuffs, { NutrientUtils.parseNutrient(it.carbohydrate) }, withMeals),
-            sugarBreakdown = NutrientUtils.aggregateMacro(allFoodstuffs, { NutrientUtils.parseNutrient(it.sugar) }, withMeals),
-            saltBreakdown = NutrientUtils.aggregateMacro(allFoodstuffs, { NutrientUtils.parseNutrient(it.salt) }, withMeals),
-            waterBreakdown = NutrientUtils.aggregateMacro(allFoodstuffs, { NutrientUtils.parseLiquidVolumeMl(it) }, withMeals),
-            fiberBreakdown = NutrientUtils.aggregateMacro(allFoodstuffs, { NutrientUtils.parseNutrient(it.fiber) }, withMeals),
+            kcalBreakdown = NutrientCalculator.aggregateMacro(allFoodstuffs, { NutrientParser.parseNutrient(it.energy) }, withMeals),
+            proteinBreakdown = NutrientCalculator.aggregateMacro(allFoodstuffs, { NutrientParser.parseNutrient(it.protein) }, withMeals),
+            fatBreakdown = NutrientCalculator.aggregateMacro(allFoodstuffs, { NutrientParser.parseNutrient(it.fat) }, withMeals),
+            carbBreakdown = NutrientCalculator.aggregateMacro(allFoodstuffs, { NutrientParser.parseNutrient(it.carbohydrate) }, withMeals),
+            sugarBreakdown = NutrientCalculator.aggregateMacro(allFoodstuffs, { NutrientParser.parseNutrient(it.sugar) }, withMeals),
+            saltBreakdown = NutrientCalculator.aggregateMacro(allFoodstuffs, { NutrientParser.parseNutrient(it.salt) }, withMeals),
+            waterBreakdown = NutrientCalculator.aggregateMacro(allFoodstuffs, { HydrationCalculator.parseLiquidVolumeMl(it) }, withMeals),
+            fiberBreakdown = NutrientCalculator.aggregateMacro(allFoodstuffs, { NutrientParser.parseNutrient(it.fiber) }, withMeals),
             vegGrams = vegGrams,
             fruitGrams = fruitGrams,
             vegBreakdown = vegBreakdown,
@@ -303,7 +306,7 @@ class KalorickeRepository(
             val fullUrl = if (itemUrl.contains("/")) itemUrl else "potraviny/$itemUrl"
             val htmlUrl = "https://www.kaloricketabulky.cz/$fullUrl"
             val htmlResp = api.getFoodHtml(htmlUrl, cookie).string()
-            NutrientUtils.parseCategoryFromHtml(htmlResp, food.title ?: food.name ?: food.nazev)
+            FoodHtmlParser.parseCategoryFromHtml(htmlResp, food.title ?: food.name ?: food.nazev)
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             DebugLogger.addActionLog("Failed to fetch food category HTML for $itemUrl: ${e.message}")
@@ -395,7 +398,7 @@ class KalorickeRepository(
             val htmlResp = executeWithRetry(operationName = "getFoodMacrosFromWeb") { cookieParam ->
                 api.getFoodHtml(htmlUrl, cookieParam).string()
             }
-            val parsed = NutrientUtils.parseLdJsonMacros(htmlResp)
+            val parsed = FoodHtmlParser.parseLdJsonMacros(htmlResp)
             if (parsed.isNotEmpty()) {
                 macroCache[itemUrl] = parsed
             }
@@ -437,7 +440,7 @@ class KalorickeRepository(
             val currentGoals = prefs.nutrientGoalsFlow.first()
 
             val kcal = data.ownTargetEnergy
-                ?: NutrientUtils.parseNutrient(data.computedTargetEnergy).takeIf { it > 0 }
+                ?: NutrientParser.parseNutrient(data.computedTargetEnergy).takeIf { it > 0 }
                 ?: currentGoals.kcal
 
             var protein = currentGoals.protein
@@ -448,7 +451,7 @@ class KalorickeRepository(
             var salt = currentGoals.salt
 
             data.ownNutrients?.forEach { item ->
-                val num = item.value ?: NutrientUtils.parseNutrient(item.computedValue)
+                val num = item.value ?: NutrientParser.parseNutrient(item.computedValue)
                 if (num > 0) {
                     when (item.code?.lowercase()) {
                         "protein" -> protein = num

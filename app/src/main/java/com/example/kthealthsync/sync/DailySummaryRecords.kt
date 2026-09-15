@@ -8,7 +8,7 @@ import androidx.health.connect.client.units.Energy
 import androidx.health.connect.client.units.Mass
 import androidx.health.connect.client.units.Volume
 import com.example.kthealthsync.domain.model.DailySummary
-import com.example.kthealthsync.domain.util.NutrientUtils
+import com.example.kthealthsync.domain.util.NutrientCalculator
 import java.time.ZonedDateTime
 import java.util.concurrent.atomic.AtomicLong
 
@@ -42,7 +42,7 @@ internal object DailySummaryRecords {
                 totalFat = Mass.grams(summary.fat),
                 totalCarbohydrate = Mass.grams(summary.carb),
                 sugar = Mass.grams(summary.sugar),
-                sodium = Mass.grams(NutrientUtils.saltToSodiumGrams(summary.salt)),
+                sodium = Mass.grams(NutrientCalculator.saltToSodiumGrams(summary.salt)),
                 dietaryFiber = Mass.grams(summary.fiber),
                 name = "KT Auto Import",
                 metadata = metadata("nutrition")
