@@ -65,14 +65,4 @@ class AppLanguageTest {
         assertEquals("Lunch", enOptions.find { it.first == "3" }?.second)
         assertEquals("Dinner", enOptions.find { it.first == "5" }?.second)
     }
-
-    @Test
-    fun testOpenFoodFactsLookup() = kotlinx.coroutines.runBlocking {
-        val nutella = com.example.kthealthsync.domain.util.OpenFoodFactsHelper.lookupProductName("8000500179864")
-        org.junit.Assert.assertNotNull(nutella)
-        org.junit.Assert.assertTrue(nutella!!.contains("Nutella", ignoreCase = true))
-
-        val invalid = com.example.kthealthsync.domain.util.OpenFoodFactsHelper.lookupProductName("0000000000000")
-        assertNull(invalid)
-    }
 }

@@ -34,9 +34,38 @@ android {
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.8"
     }
+    testOptions {
+        unitTests.all {
+            it.useJUnit {
+                excludeCategories("com.example.kthealthsync.LiveNetworkTest")
+            }
+        }
+    }
+}
+
+// Reuse the Android JVM test compilation, but run network tests only on explicit request.
+tasks.register<Test>("liveTest") {
+    group = "verification"
+    description = "Runs live API tests (requires network and Kaloricke credentials)."
+    val unitTest = tasks.named<Test>("testDebugUnitTest").get()
+    dependsOn(provider { unitTest.taskDependencies.getDependencies(unitTest) })
+    testClassesDirs = unitTest.testClassesDirs
+    classpath = unitTest.classpath
+    useJUnit {
+        includeCategories("com.example.kthealthsync.LiveNetworkTest")
+    }
+    workingDir = rootProject.projectDir
+    // External data changes independently of the test sources.
+    outputs.upToDateWhen { false }
+    outputs.cacheIf { false }
 }
 
 dependencies {
+    constraints {
+        implementation("androidx.fragment:fragment:1.6.2") {
+            because("The barcode scanner brings Fragment 1.0.0, incompatible with Activity Result APIs")
+        }
+    }
     implementation("io.coil-kt:coil-compose:2.6.0")
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")

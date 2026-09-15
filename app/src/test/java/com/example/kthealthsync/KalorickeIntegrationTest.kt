@@ -8,31 +8,31 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import org.junit.experimental.categories.Category
 import java.io.File
 import java.util.Properties
 
+@Category(LiveNetworkTest::class)
 class KalorickeIntegrationTest {
     
     private lateinit var cookie: String
 
     @Before
     fun setup() {
-        val localPropsFile = File("../local.properties")
-        if (!localPropsFile.exists()) {
-            throw IllegalStateException("Missing local.properties file at ${localPropsFile.absolutePath}")
-        }
         val properties = Properties()
-        properties.load(localPropsFile.inputStream())
-        
-        cookie = properties.getProperty("KALORICKE_COOKIE") ?: ""
-        if (cookie.isEmpty()) {
-            throw IllegalStateException("KALORICKE_COOKIE is not defined in local.properties. Please add it!")
+        val localPropsFile = File("local.properties")
+        if (localPropsFile.exists()) {
+            localPropsFile.inputStream().use { properties.load(it) }
+        }
+        cookie = System.getenv("KALORICKE_COOKIE")?.takeIf { it.isNotBlank() }
+            ?: properties.getProperty("KALORICKE_COOKIE", "")
+        check(cookie.isNotBlank()) {
+            "Live tests require KALORICKE_COOKIE in the environment or root local.properties."
         }
     }
 
     @Test
     fun testBorshIntegration() = runBlocking {
-        println("Using cookie starting with: ${cookie.take(20)}...")
         val api = RetrofitClient.instance
         
         // 1. Fetch meal list
@@ -126,7 +126,6 @@ class KalorickeIntegrationTest {
 
     @Test
     fun testYesterdaySupplements() = runBlocking {
-        println("Using cookie starting with: ${cookie.take(20)}...")
         val api = RetrofitClient.instance
         
         try {
