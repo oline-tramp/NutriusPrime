@@ -388,14 +388,19 @@ class KalorickeRepository(
     suspend fun searchFood(
         query: String,
         customMeals: List<AutocompleteResponseItem>,
-        page: Int = 0
+        page: Int = 0,
+        language: com.example.kthealthsync.domain.model.AppLanguage? = null
     ): List<AutocompleteResponseItem> {
         val cookie = getCookie()
         if (cookie.isEmpty()) return emptyList()
 
         val serverResults = try {
             executeWithRetry(operationName = "searchFood") { cookieParam ->
-                api.searchFood(query = query, page = page, cookie = cookieParam).filter { it.id != null }
+                api.searchFood(
+                    query = query, page = page,
+                    cookie = com.example.kthealthsync.domain.model.SearchLocale.cookie(cookieParam, language),
+                    language = language?.takeUnless { it == com.example.kthealthsync.domain.model.AppLanguage.AUTO }?.code
+                ).filter { it.id != null }
             }
         } catch (e: Exception) {
             if (e is CancellationException) throw e

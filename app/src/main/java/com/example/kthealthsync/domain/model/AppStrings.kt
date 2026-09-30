@@ -35,6 +35,7 @@ data class AppStrings(
     val moveAction: String,
     val cloneAction: String,
     val deleteAction: String,
+    val refreshAction: String,
 
     // Drag & Drop
     val releaseToMove: String,
@@ -163,6 +164,7 @@ val RuStrings = AppStrings(
     moveAction = "Перенести",
     cloneAction = "Клон",
     deleteAction = "Удалить",
+    refreshAction = "Обновить",
 
     releaseToMove = "Отпустите для переноса 📥",
     releaseToClone = "Отпустите для клонирования 📋",
@@ -278,6 +280,7 @@ val CsStrings = AppStrings(
     moveAction = "Přesunout",
     cloneAction = "Klonovat",
     deleteAction = "Smazat",
+    refreshAction = "Obnovit",
 
     releaseToMove = "Pusťte pro přesun 📥",
     releaseToClone = "Pusťte pro klonování 📋",
@@ -393,6 +396,7 @@ val EnStrings = AppStrings(
     moveAction = "Move",
     cloneAction = "Clone",
     deleteAction = "Delete",
+    refreshAction = "Refresh",
 
     releaseToMove = "Release to move 📥",
     releaseToClone = "Release to clone 📋",

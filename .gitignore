@@ -1,6 +1,13 @@
 *.iml
-.gradle
+.gradle/
+.kotlin/
+build/
+**/build/
+__pycache__/
+*.py[cod]
 /local.properties
+local.properties
+.idea/
 /.idea/caches
 /.idea/libraries
 /.idea/modules.xml
@@ -8,11 +15,17 @@
 /.idea/navEditor.xml
 /.idea/assetWizardSettings.xml
 .DS_Store
-/build
 /captures
 .externalNativeBuild
 .cxx
-local.properties
-app/build/
+*.hprof
+*.apk
+*.aab
+.pytest_cache/
 android-sdk/
 mise.toml
+
+# Research / evaluation scripts and benchmarks
+nano-debug/
+scripts/
+docs/

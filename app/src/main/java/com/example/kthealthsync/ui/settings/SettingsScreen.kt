@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.kthealthsync.domain.model.AppLanguage
+import com.example.kthealthsync.BuildConfig
 import com.example.kthealthsync.domain.model.LocalAppStrings
 import com.example.kthealthsync.domain.model.NutrientGoals
 import java.util.Locale
@@ -165,6 +166,22 @@ fun SettingsScreen(
                 title = "Health Connect Permissions",
                 subtitle = "Review or grant permissions required to write data to Health Connect.",
                 onClick = onRequestPermissions
+            )
+            val versionLabel = when (strings.language) {
+                AppLanguage.CS -> "Verze"
+                AppLanguage.EN -> "Version"
+                else -> "Версия"
+            }
+            val buildLabel = when (strings.language) {
+                AppLanguage.CS -> "sestavení"
+                AppLanguage.EN -> "build"
+                else -> "билд"
+            }
+            Text(
+                text = "$versionLabel ${BuildConfig.VERSION_NAME} · $buildLabel ${BuildConfig.VERSION_CODE} · ${BuildConfig.BUILD_TYPE}",
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 24.dp),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }

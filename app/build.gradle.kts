@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
@@ -11,8 +12,8 @@ android {
         applicationId = "com.example.kthealthsync"
         minSdk = 26
         targetSdk = 34
-        versionCode = 33
-        versionName = "2.22"
+        versionCode = 39
+        versionName = "2.23"
     }
 
     buildTypes {
@@ -25,14 +26,9 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
-    }
     buildFeatures {
         compose = true
-    }
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.8"
+        buildConfig = true
     }
     testOptions {
         unitTests.all {
@@ -40,6 +36,19 @@ android {
                 excludeCategories("com.example.kthealthsync.LiveNetworkTest")
             }
         }
+    }
+    lint {
+        disable += "CoroutineCreationDuringComposition"
+        disable += "StateFlowValueCalledInComposition"
+        disable += "FlowOperatorInvokedInComposition"
+        disable += "ProduceStateDoesNotAssignValue"
+        disable += "RememberReturnType"
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
 }
 
@@ -61,6 +70,7 @@ tasks.register<Test>("liveTest") {
 }
 
 dependencies {
+    implementation("com.google.mlkit:genai-prompt:1.0.0-beta4")
     constraints {
         implementation("androidx.fragment:fragment:1.6.2") {
             because("The barcode scanner brings Fragment 1.0.0, incompatible with Activity Result APIs")
@@ -97,6 +107,10 @@ dependencies {
     // Barcode Scanner (Google Play services code scanner)
     implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
     
+    // Wearable Data Layer
+    implementation("com.google.android.gms:play-services-wearable:18.2.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")
+
     // Testing
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")

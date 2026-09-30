@@ -14,3 +14,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "KTHealthSync"
 include(":app")
+include(":wear")

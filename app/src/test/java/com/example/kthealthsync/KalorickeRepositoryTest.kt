@@ -20,6 +20,21 @@ import kotlin.coroutines.intrinsics.COROUTINE_SUSPENDED
 import kotlin.coroutines.resumeWithException
 
 class KalorickeRepositoryTest {
+    @Test fun searchPreservesCzechQueryAndAppliesSelectedLanguageToEveryPage() = runTest {
+        val original = "session=secret; org.springframework.web.servlet.i18n.CookieLocaleResolver.LOCALE=ru"
+        prefs.saveCookie(original)
+        val repo = repository { method, args ->
+            assertEquals("searchFood", method)
+            assertEquals("okurka salatova", args[0])
+            assertTrue((args[2] as String).contains("session=secret"))
+            assertTrue((args[2] as String).contains("CookieLocaleResolver.LOCALE=cs"))
+            assertFalse((args[2] as String).contains("LOCALE=ru"))
+            assertEquals("cs", args[5])
+            emptyList<AutocompleteResponseItem>()
+        }
+        for (page in 0..1) repo.searchFood("okurka salatova", emptyList(), page, com.example.kthealthsync.domain.model.AppLanguage.CS)
+        assertEquals(original, prefs.cookieFlow.value)
+    }
     private val prefs = MemoryPreferences()
     private val calls = mutableListOf<String>()
     private val request = AddFoodRequest("food", "Food", "food", "10.09.2026", "100", "3")

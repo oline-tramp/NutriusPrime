@@ -57,6 +57,9 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private val _uiState = MutableStateFlow<DashboardUiState>(DashboardUiState.Loading)
     val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()
 
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
+
     val nutrientGoals: StateFlow<NutrientGoals> = prefs.nutrientGoalsFlow.stateIn(
         scope = viewModelScope,
         started = SharingStarted.Eagerly,
@@ -71,6 +74,11 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
     init {
         loadDailyData()
+        viewModelScope.launch {
+            com.example.kthealthsync.data.repository.DiaryUpdateEvents.events.collect {
+                refresh(silent = true)
+            }
+        }
     }
 
     private fun syncGoals() {
@@ -110,6 +118,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun refresh(silent: Boolean = false) {
+        _isRefreshing.value = true
         viewModelScope.launch {
             repository.fetchNutrientGoalsFromApi(force = true)
         }
@@ -427,8 +436,13 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 val message = if (code == 302 || code == 401) {
                     "Session expired. Please log in again in Settings."
                 } else "Error: ${e.message ?: "Unknown error"}"
-                _uiState.value = DashboardUiState.Error(message)
+                if (!silent || _uiState.value !is DashboardUiState.Success) {
+                    _uiState.value = DashboardUiState.Error(message)
+                }
                 DebugLogger.addActionLog("Error loading $dateStr: ${e.message}")
+            },
+            onFinally = {
+                _isRefreshing.value = false
             }
         )
     }

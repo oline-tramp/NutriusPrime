@@ -11,6 +11,7 @@ import com.example.kthealthsync.domain.util.OpenFoodFactsHelper
 import com.example.kthealthsync.ui.LatestRequest
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -108,6 +109,13 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
 
     init {
         loadDefaults()
+        viewModelScope.launch {
+            var previous: com.example.kthealthsync.domain.model.AppLanguage? = null
+            prefs.resolvedLanguageFlow.distinctUntilChanged().collect { language ->
+                if (previous != null && previous != language) onQueryChange(_query.value)
+                previous = language
+            }
+        }
     }
 
     fun loadDefaults() {
@@ -129,6 +137,14 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
                 _favoriteItems.value = favorites
                 if (favorites.size < 10) {
                     _canLoadMoreFavorites.value = false
+                }
+
+                val combined = (frequent + favorites).distinctBy { it.id }
+                val cookie = prefs.cookieFlow.first()
+                if (cookie.isNotBlank() && combined.isNotEmpty()) {
+                    try {
+                        com.example.kthealthsync.wear.WearSyncManager(getApplication()).syncDataToWatch(cookie, combined)
+                    } catch (_: Exception) {}
                 }
 
             } catch (e: Exception) {
@@ -232,12 +248,12 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
             scope = viewModelScope,
             load = {
                 if (debounce) delay(400)
-                var matches = repository.searchFood(queryStr, emptyList(), page = 0)
+                var matches = repository.searchFood(queryStr, emptyList(), page = 0, language = prefs.resolvedLanguageFlow.first())
                 val isBarcode = queryStr.all { it.isDigit() } && queryStr.length in 8..14
                 if (matches.isEmpty() && isBarcode) {
                     val offName = OpenFoodFactsHelper.lookupProductName(queryStr)
                     if (!offName.isNullOrBlank()) {
-                        matches = repository.searchFood(offName, emptyList(), page = 0)
+                        matches = repository.searchFood(offName, emptyList(), page = 0, language = prefs.resolvedLanguageFlow.first())
                     }
                 }
                 matches
@@ -274,7 +290,7 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
         _errorMessage.value = null
         pageRequest.launch(
             scope = viewModelScope,
-            load = { repository.searchFood(q, emptyList(), page = nextPage) },
+            load = { repository.searchFood(q, emptyList(), page = nextPage, language = prefs.resolvedLanguageFlow.first()) },
             onSuccess = { newMatches ->
                 val currentIds = _results.value.mapNotNull { it.id }.toSet()
                 val freshItems = newMatches.filter { it.id != null && !currentIds.contains(it.id) }

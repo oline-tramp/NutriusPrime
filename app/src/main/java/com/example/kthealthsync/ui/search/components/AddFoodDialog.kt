@@ -47,6 +47,8 @@ fun AddFoodDialog(
     item: AutocompleteResponseItem,
     date: String,
     initialMealTimeGuid: String? = null,
+    draftPortion: com.example.kthealthsync.domain.draft.DraftPortion? = null,
+    fromDraft: Boolean = false,
     currentKcal: Double,
     currentProtein: Double,
     currentCarbs: Double,
@@ -67,6 +69,7 @@ fun AddFoodDialog(
     var unitOptions by remember { mutableStateOf<List<FoodFormUnitOption>>(emptyList()) }
     var selectedUnit by remember { mutableStateOf<FoodFormUnitOption?>(null) }
     var amountText by remember { mutableStateOf("") }
+    var draftHint by remember { mutableStateOf<String?>(null) }
     var actualDefaultBaseAmount by remember { mutableStateOf(1.0) }
     var selectedTimeGuid by remember(date, initialMealTimeGuid) {
         mutableStateOf(initialMealTimeGuid ?: MealTimeUtils.getDefaultMealTimeGuid(date, timeOptions))
@@ -115,6 +118,13 @@ fun AddFoodDialog(
                     saltPer100 = macros["sůl"] ?: 0.0
                 }
             }
+            if (fromDraft) {
+                val match = draftPortion?.let { com.example.kthealthsync.domain.draft.FoodDraftParser.matchUnit(it, unitOptions) }
+                amountText = match?.let { formatAmount(it.amount) }.orEmpty()
+                if (match != null) selectedUnit = match.unit
+                draftHint = if (match != null) "Количество из черновика. Проверьте продукт, единицу и порцию перед добавлением."
+                    else "Порция из черновика не подставлена: выберите подходящую единицу и введите количество."
+            }
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             errorMsg = e.message ?: "Failed to load form details"
@@ -153,6 +163,7 @@ fun AddFoodDialog(
                     if (errorMsg != null) {
                         Text(errorMsg!!, color = MaterialTheme.colorScheme.error)
                     }
+                    draftHint?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
 
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         // Amount
@@ -208,7 +219,8 @@ fun AddFoodDialog(
                                             text = { Text(opt.title ?: "") },
                                             onClick = {
                                                 selectedUnit = opt
-                                                personalMealForm?.let { amountText = formatAmount(it.suggestedAmount(opt)) }
+                                                if (fromDraft) amountText = ""
+                                                else personalMealForm?.let { amountText = formatAmount(it.suggestedAmount(opt)) }
                                                 unitExpanded = false
                                             }
                                         )
@@ -365,6 +377,7 @@ fun AddFoodDialog(
                     }
                 },
                 enabled = !isSubmitting && !isLoadingOptions && selectedUnit != null &&
+                    (!fromDraft || amountText.replace(',', '.').toDoubleOrNull()?.let { it.isFinite() && it > 0 } == true) &&
                     (!isPersonalMeal || (personalMealForm != null && amountText.replace(',', '.').toDoubleOrNull()?.let { it.isFinite() && it > 0 } == true))
             ) {
                 if (isSubmitting) {

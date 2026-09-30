@@ -44,6 +44,16 @@ class MainActivity : ComponentActivity() {
     private val healthConnectManager by lazy { HealthConnectManager(this) }
     private val searchViewModel: SearchViewModel by viewModels()
     private val dashboardViewModel: DashboardViewModel by viewModels()
+    private var isFirstLaunch = true
+
+    override fun onResume() {
+        super.onResume()
+        if (!isFirstLaunch) {
+            dashboardViewModel.refresh(silent = true)
+        } else {
+            isFirstLaunch = false
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

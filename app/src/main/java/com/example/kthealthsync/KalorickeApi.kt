@@ -253,7 +253,8 @@ interface KalorickeApiService {
         @retrofit2.http.Query("page") page: Int = 0,
         @Header("Cookie") cookie: String,
         @Header("User-Agent") userAgent: String = "Mozilla/5.0 (Linux; Android 14; Pixel 7 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
-        @Header("Accept") accept: String = "application/json, text/plain, */*"
+        @Header("Accept") accept: String = "application/json, text/plain, */*",
+        @Header("Accept-Language") language: String? = null
     ): List<AutocompleteResponseItem>
 
     @POST("user/foodstuff/add?format=json")

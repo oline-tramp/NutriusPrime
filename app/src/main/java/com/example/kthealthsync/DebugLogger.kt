@@ -57,6 +57,7 @@ object DebugLogger {
     }
 
     private fun addEntry(entry: LogEntry) {
+        runCatching { android.util.Log.d("KTHealthSync", entry.message) }
         _logs.update { current -> (listOf(entry) + current).take(100) }
     }
 

@@ -5,6 +5,12 @@ import android.content.Intent
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -34,15 +40,19 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -54,6 +64,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
@@ -100,6 +111,23 @@ fun DashboardScreen(
     val withMeals by viewModel.withMeals.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
     val nutrientGoals by viewModel.nutrientGoals.collectAsState()
+    val isRefreshing by viewModel.isRefreshing.collectAsState()
+
+    val pullToRefreshState = rememberPullToRefreshState()
+
+    if (pullToRefreshState.isRefreshing) {
+        LaunchedEffect(true) {
+            viewModel.refresh(silent = true)
+        }
+    }
+
+    LaunchedEffect(isRefreshing) {
+        if (isRefreshing) {
+            pullToRefreshState.startRefresh()
+        } else {
+            pullToRefreshState.endRefresh()
+        }
+    }
 
     val now = ZonedDateTime.now()
     val isToday = selectedDate.toLocalDate() == now.toLocalDate()
@@ -159,6 +187,31 @@ fun DashboardScreen(
                     }
                 },
                 actions = {
+                    val infiniteTransition = rememberInfiniteTransition(label = "refresh_spin")
+                    val spinRotation by infiniteTransition.animateFloat(
+                        initialValue = 0f,
+                        targetValue = 360f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(1000, easing = LinearEasing),
+                            repeatMode = RepeatMode.Restart
+                        ),
+                        label = "spin"
+                    )
+                    val iconRotation = if (isRefreshing) spinRotation else 0f
+
+                    IconButton(
+                        onClick = {
+                            if (!isRefreshing) {
+                                viewModel.refresh(silent = true)
+                            }
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = strings.refreshAction,
+                            modifier = Modifier.rotate(iconRotation)
+                        )
+                    }
                     IconButton(onClick = {
                         val state = uiState
                         if (state is DashboardUiState.Success) {
@@ -270,6 +323,7 @@ fun DashboardScreen(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
+                .nestedScroll(pullToRefreshState.nestedScrollConnection)
         ) {
             Column(
                 modifier = Modifier
@@ -716,6 +770,13 @@ fun DashboardScreen(
                     }
                 }
             }
+
+            PullToRefreshContainer(
+                state = pullToRefreshState,
+                modifier = Modifier.align(Alignment.TopCenter),
+                containerColor = Color(0xFF242424),
+                contentColor = MaterialTheme.colorScheme.primary
+            )
         }
 
         // Move Dialog

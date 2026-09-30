@@ -11,6 +11,10 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import com.example.kthealthsync.ui.draft.FoodDraftDialog
+import com.example.kthealthsync.ui.draft.FoodDraftViewModel
+import com.example.kthealthsync.domain.draft.FoodDraftParser
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -50,6 +54,11 @@ fun SearchScreen(
     onFoodAdded: (AddedFoodInfo) -> Unit
 ) {
     val context = LocalContext.current
+    val draftModel: FoodDraftViewModel = viewModel()
+    val draftRows by draftModel.items.collectAsState()
+    val draftSelectedId by draftModel.selectedId.collectAsState()
+    val draftSelection = draftRows.find { it.id == draftSelectedId }
+    var showDraft by rememberSaveable { mutableStateOf(false) }
     val strings = LocalAppStrings.current
     val query by viewModel.query.collectAsState()
     val results by viewModel.results.collectAsState()
@@ -127,6 +136,7 @@ fun SearchScreen(
                 title = { Text(strings.searchPlaceholder.removeSuffix("...")) },
                 navigationIcon = {
                     IconButton(onClick = {
+                        draftModel.select(null)
                         viewModel.clearSearch()
                         onBack()
                     }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = strings.cancel) }
@@ -140,6 +150,15 @@ fun SearchScreen(
                 .fillMaxSize()
                 .padding(16.dp)
         ) {
+            OutlinedButton(onClick = { keyboardController?.hide(); showDraft = true }, modifier = Modifier.fillMaxWidth()) {
+                Text(if (draftRows.isEmpty()) "Из текста · альфа" else "Черновик еды (${draftRows.size})")
+            }
+            draftSelection?.let { row ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Черновик: ${row.name} ${row.amount} ${row.unit.label}", modifier = Modifier.weight(1f))
+                    TextButton(onClick = { draftModel.select(null) }) { Text("Обычный поиск") }
+                }
+            }
             OutlinedTextField(
                 value = query,
                 onValueChange = { viewModel.onQueryChange(it) },
@@ -256,6 +275,8 @@ fun SearchScreen(
             item = selectedItem!!,
             date = date,
             initialMealTimeGuid = preselectedMealTimeGuid,
+            draftPortion = draftSelection?.let(FoodDraftParser::portion),
+            fromDraft = draftSelection != null,
             currentKcal = currentKcal,
             currentProtein = currentProtein,
             currentCarbs = currentCarbs,
@@ -268,10 +289,19 @@ fun SearchScreen(
             onDismiss = { showAddDialog = false },
             onSuccess = { info ->
                 showAddDialog = false
+                draftSelection?.let { draftModel.remove(it.id) }
                 viewModel.clearSearch()
                 onFoodAdded(info)
             }
         )
+    }
+    if (showDraft) {
+        FoodDraftDialog(model = draftModel, onClose = { showDraft = false }, onSearch = { row ->
+            draftModel.select(row.id)
+            viewModel.onQueryChange(row.name)
+            showDraft = false
+            keyboardController?.hide()
+        })
     }
 }
 
