@@ -1,6 +1,7 @@
 package com.example.kthealthsync.wear.presentation.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -165,6 +166,15 @@ fun AddFoodScreen(
 
     var grams by remember(food.id) { mutableIntStateOf(parsedDefault ?: 100) }
     var userHasModifiedGrams by remember { mutableStateOf(false) }
+    var stepMode by remember { mutableIntStateOf(10) }
+    var isDrumFocused by remember { mutableStateOf(false) }
+    var accumulatedRotaryForGrams by remember { mutableFloatStateOf(0f) }
+
+    LaunchedEffect(listState.isScrollInProgress) {
+        if (listState.isScrollInProgress) {
+            isDrumFocused = false
+        }
+    }
 
     LaunchedEffect(food.id) {
         val apiGrams = dataManager.getFoodDefaultGrams(food.id)
@@ -228,15 +238,23 @@ fun AddFoodScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .onRotaryScrollEvent { event ->
-                        userHasModifiedGrams = true
-                        val delta = event.verticalScrollPixels
-                        val step = calculateFineStep(grams)
-                        if (delta > 0) {
-                            grams = (grams + step).coerceAtMost(2000)
-                        } else if (delta < 0) {
-                            grams = (grams - step).coerceAtLeast(1)
+                        if (isDrumFocused) {
+                            userHasModifiedGrams = true
+                            accumulatedRotaryForGrams += event.verticalScrollPixels
+                            val threshold = 18f
+                            while (accumulatedRotaryForGrams >= threshold) {
+                                grams = (grams + stepMode).coerceAtMost(2000)
+                                accumulatedRotaryForGrams -= threshold
+                            }
+                            while (accumulatedRotaryForGrams <= -threshold) {
+                                grams = (grams - stepMode).coerceAtLeast(1)
+                                accumulatedRotaryForGrams += threshold
+                            }
+                            true
+                        } else {
+                            listState.dispatchRawDelta(event.verticalScrollPixels)
+                            true
                         }
-                        true
                     }
                     .focusRequester(focusRequester)
                     .focusable(),
@@ -275,9 +293,40 @@ fun AddFoodScreen(
                     }
                 }
 
+                // Step Mode Selector (±1 / ±10)
+                item {
+                    Row(
+                        modifier = Modifier.padding(vertical = 2.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        listOf(1, 10).forEach { s ->
+                            val isSelected = stepMode == s
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(if (isSelected) MaterialTheme.colors.primary else Color(0xFF26262B))
+                                    .clickable {
+                                        stepMode = s
+                                        isDrumFocused = true
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 3.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "±$s $unitLabel",
+                                    fontSize = 11.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isSelected) Color.Black else Color.White
+                                )
+                            }
+                        }
+                    }
+                }
+
                 // Fine-tuning Drum Wheel & Stepper (+ / -)
                 item {
-                    val step = calculateFineStep(grams)
+                    val step = stepMode
                     val previousGrams = (grams - step).coerceAtLeast(1)
                     val nextGrams = (grams + step).coerceAtMost(2000)
                     var accumulatedDrag by remember { mutableFloatStateOf(0f) }
@@ -294,7 +343,8 @@ fun AddFoodScreen(
                             contentDescription = "-$step",
                             onSingleClick = {
                                 userHasModifiedGrams = true
-                                grams = (grams - calculateFineStep(grams)).coerceAtLeast(1)
+                                isDrumFocused = true
+                                grams = (grams - stepMode).coerceAtLeast(1)
                             },
                             onRepeatStep = {
                                 userHasModifiedGrams = true
@@ -308,23 +358,22 @@ fun AddFoodScreen(
                             modifier = Modifier
                                 .width(96.dp)
                                 .padding(horizontal = 4.dp)
-                                .pointerInput(grams) {
+                                .pointerInput(grams, stepMode) {
                                     detectVerticalDragGestures(
                                         onDragStart = { accumulatedDrag = 0f },
                                         onDragEnd = { accumulatedDrag = 0f },
                                         onDragCancel = { accumulatedDrag = 0f },
                                         onVerticalDrag = { change, dragAmount ->
                                             userHasModifiedGrams = true
+                                            isDrumFocused = true
                                             accumulatedDrag += dragAmount
                                             val thresholdPx = 16f
                                             while (accumulatedDrag <= -thresholdPx) {
-                                                val s = calculateFineStep(grams)
-                                                grams = (grams + s).coerceAtMost(2000)
+                                                grams = (grams + stepMode).coerceAtMost(2000)
                                                 accumulatedDrag += thresholdPx
                                             }
                                             while (accumulatedDrag >= thresholdPx) {
-                                                val s = calculateFineStep(grams)
-                                                grams = (grams - s).coerceAtLeast(1)
+                                                grams = (grams - stepMode).coerceAtLeast(1)
                                                 accumulatedDrag -= thresholdPx
                                             }
                                             change.consume()
@@ -340,6 +389,7 @@ fun AddFoodScreen(
                                 fontWeight = FontWeight.Medium,
                                 modifier = Modifier.clickable {
                                     userHasModifiedGrams = true
+                                    isDrumFocused = true
                                     grams = previousGrams
                                 }
                             )
@@ -347,7 +397,15 @@ fun AddFoodScreen(
                             Box(
                                 modifier = Modifier
                                     .padding(vertical = 1.dp)
-                                    .background(Color(0x2264FFDA), shape = RoundedCornerShape(8.dp))
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isDrumFocused) Color(0x3364FFDA) else Color(0x1A64FFDA))
+                                    .then(
+                                        if (isDrumFocused) Modifier.border(1.5.dp, MaterialTheme.colors.primary, RoundedCornerShape(8.dp))
+                                        else Modifier
+                                    )
+                                    .clickable {
+                                        isDrumFocused = !isDrumFocused
+                                    }
                                     .padding(horizontal = 8.dp, vertical = 2.dp),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -367,6 +425,7 @@ fun AddFoodScreen(
                                 fontWeight = FontWeight.Medium,
                                 modifier = Modifier.clickable {
                                     userHasModifiedGrams = true
+                                    isDrumFocused = true
                                     grams = nextGrams
                                 }
                             )
@@ -377,7 +436,8 @@ fun AddFoodScreen(
                             contentDescription = "+$step",
                             onSingleClick = {
                                 userHasModifiedGrams = true
-                                grams = (grams + calculateFineStep(grams)).coerceAtMost(2000)
+                                isDrumFocused = true
+                                grams = (grams + stepMode).coerceAtMost(2000)
                             },
                             onRepeatStep = {
                                 userHasModifiedGrams = true
