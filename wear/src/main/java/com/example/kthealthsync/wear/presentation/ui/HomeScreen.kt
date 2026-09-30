@@ -3,7 +3,10 @@ package com.example.kthealthsync.wear.presentation.ui
 import android.app.Activity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,11 +18,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.rotary.onRotaryScrollEvent
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -41,6 +50,8 @@ import androidx.wear.compose.material.TimeText
 import com.example.kthealthsync.wear.data.WatchDataManager
 import com.example.kthealthsync.wear.data.WearFoodItem
 import com.example.kthealthsync.wear.presentation.InputHelper
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun HomeScreen(
@@ -51,6 +62,16 @@ fun HomeScreen(
     val listState = rememberScalingLazyListState()
     val favorites by dataManager.favoriteFoods.collectAsState()
     val isPhoneConnected by dataManager.isPhoneConnected.collectAsState()
+
+    val focusRequester = remember { FocusRequester() }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        delay(150)
+        try {
+            focusRequester.requestFocus()
+        } catch (_: Exception) {}
+    }
 
     val context = androidx.compose.ui.platform.LocalContext.current
     val searchLauncher = rememberLauncherForActivityResult(
@@ -68,12 +89,24 @@ fun HomeScreen(
         timeText = { TimeText() },
         positionIndicator = { PositionIndicator(scalingLazyListState = listState) }
     ) {
-        ScalingLazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            state = listState,
-            autoCentering = androidx.wear.compose.foundation.lazy.AutoCenteringParams(itemIndex = 0),
-            horizontalAlignment = Alignment.CenterHorizontally
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .focusRequester(focusRequester)
+                .focusable()
+                .onRotaryScrollEvent { event ->
+                    scope.launch {
+                        listState.scrollBy(event.verticalScrollPixels)
+                    }
+                    true
+                }
         ) {
+            ScalingLazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                state = listState,
+                autoCentering = androidx.wear.compose.foundation.lazy.AutoCenteringParams(itemIndex = 0),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
             // Search Button
             item {
                 Chip(
@@ -200,4 +233,5 @@ fun HomeScreen(
             }
         }
     }
+}
 }

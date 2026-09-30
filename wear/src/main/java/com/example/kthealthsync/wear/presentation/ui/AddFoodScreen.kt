@@ -1,11 +1,13 @@
 package com.example.kthealthsync.wear.presentation.ui
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -201,7 +203,18 @@ fun AddFoodScreen(
     }
 
     LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
+        delay(150)
+        try {
+            focusRequester.requestFocus()
+        } catch (e: Exception) {
+            Log.w("AddFoodScreen", "Initial focus failed: ${e.message}")
+        }
+    }
+
+    LaunchedEffect(isDrumFocused) {
+        try {
+            focusRequester.requestFocus()
+        } catch (_: Exception) {}
     }
 
     Scaffold(
@@ -234,10 +247,13 @@ fun AddFoodScreen(
                 }
             }
         } else {
-            ScalingLazyColumn(
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .focusRequester(focusRequester)
+                    .focusable()
                     .onRotaryScrollEvent { event ->
+                        Log.d("AddFoodScreen", "Rotary event: delta=${event.verticalScrollPixels}, drumFocused=$isDrumFocused")
                         if (isDrumFocused) {
                             userHasModifiedGrams = true
                             accumulatedRotaryForGrams += event.verticalScrollPixels
@@ -252,15 +268,18 @@ fun AddFoodScreen(
                             }
                             true
                         } else {
-                            listState.dispatchRawDelta(event.verticalScrollPixels)
+                            scope.launch {
+                                listState.scrollBy(event.verticalScrollPixels)
+                            }
                             true
                         }
                     }
-                    .focusRequester(focusRequester)
-                    .focusable(),
-                state = listState,
-                horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                ScalingLazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    state = listState,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
                 // Title
                 item {
                     Text(
@@ -575,4 +594,5 @@ fun AddFoodScreen(
             }
         }
     }
+}
 }

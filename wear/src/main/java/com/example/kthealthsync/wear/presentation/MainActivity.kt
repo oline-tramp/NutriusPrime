@@ -80,6 +80,15 @@ class MainActivity : ComponentActivity() {
         dataManager.checkConnectedNodes()
     }
 
+    override fun onGenericMotionEvent(event: android.view.MotionEvent?): Boolean {
+        if (event?.action == android.view.MotionEvent.ACTION_SCROLL &&
+            event.isFromSource(android.view.InputDevice.SOURCE_ROTARY_ENCODER)
+        ) {
+            android.util.Log.d("MainActivity", "Rotary motion: axis_scroll=${event.getAxisValue(android.view.MotionEvent.AXIS_SCROLL)}")
+        }
+        return super.onGenericMotionEvent(event)
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         dataManager.onDestroy()
