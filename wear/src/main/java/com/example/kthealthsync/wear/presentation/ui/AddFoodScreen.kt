@@ -1,10 +1,14 @@
 package com.example.kthealthsync.wear.presentation.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,6 +17,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
@@ -20,7 +29,7 @@ import androidx.compose.material.icons.filled.Remove
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableDoubleStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -28,9 +37,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.rotary.onRotaryScrollEvent
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -44,7 +56,6 @@ import androidx.wear.compose.material.ButtonDefaults
 import androidx.wear.compose.material.Chip
 import androidx.wear.compose.material.ChipDefaults
 import androidx.wear.compose.material.CircularProgressIndicator
-import androidx.wear.compose.material.CompactButton
 import androidx.wear.compose.material.CompactChip
 import androidx.wear.compose.material.Icon
 import androidx.wear.compose.material.MaterialTheme
@@ -54,11 +65,88 @@ import androidx.wear.compose.material.Text
 import androidx.wear.compose.material.TimeText
 import com.example.kthealthsync.wear.data.WatchDataManager
 import com.example.kthealthsync.wear.data.WatchMealTimeUtils
+import com.example.kthealthsync.wear.data.WatchNutrientParser
 import com.example.kthealthsync.wear.data.WearAddFoodRequest
 import com.example.kthealthsync.wear.data.WearFoodItem
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+
+internal fun calculateFineStep(currentGrams: Int): Int {
+    return when {
+        currentGrams < 10 -> 1
+        currentGrams < 50 -> 5
+        else -> 10
+    }
+}
+
+internal fun getGramPresets(selected: Int): List<Int> {
+    val set = sortedSetOf<Int>()
+    // Below 10 by 1 down to 1
+    for (i in 1..10) set.add(i)
+    // 10 to 50 by 10
+    for (i in 10..50 step 10) set.add(i)
+    // 50 to 500 by 50
+    for (i in 50..500 step 50) set.add(i)
+    // 500 to 2000 by 100
+    for (i in 500..2000 step 100) set.add(i)
+    // Offsets around selected value
+    if (selected in 1..2000) set.add(selected)
+    for (k in 1..3) {
+        if (selected - k * 50 in 1..2000) set.add(selected - k * 50)
+        if (selected + k * 50 in 1..2000) set.add(selected + k * 50)
+    }
+    return set.toList()
+}
+
+@Composable
+private fun RepeatingButton(
+    icon: ImageVector,
+    contentDescription: String,
+    onSingleClick: () -> Unit,
+    onRepeatStep: () -> Unit
+) {
+    val coroutineScope = rememberCoroutineScope()
+    var isPressed by remember { mutableStateOf(false) }
+
+    Box(
+        modifier = Modifier
+            .size(36.dp)
+            .clip(CircleShape)
+            .background(if (isPressed) Color(0xFF3C3C46) else Color(0xFF24242A))
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onPress = {
+                        isPressed = true
+                        var isHeld = false
+                        val repeatJob = coroutineScope.launch {
+                            delay(400) // Initial hold threshold
+                            isHeld = true
+                            while (isActive) {
+                                onRepeatStep()
+                                delay(1000) // 50 every 1 second while held
+                            }
+                        }
+                        val released = tryAwaitRelease()
+                        repeatJob.cancel()
+                        isPressed = false
+                        if (released && !isHeld) {
+                            onSingleClick()
+                        }
+                    }
+                )
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = Color.White,
+            modifier = Modifier.size(18.dp)
+        )
+    }
+}
 
 @Composable
 fun AddFoodScreen(
@@ -70,7 +158,25 @@ fun AddFoodScreen(
     val scope = rememberCoroutineScope()
     val focusRequester = remember { FocusRequester() }
 
-    var grams by remember { mutableIntStateOf(100) }
+    val parsedDefault = remember(food.unit) {
+        val p = WatchNutrientParser.parsePortionGrams(food.unit).roundToInt()
+        if (p in 1..2000) p else null
+    }
+
+    var grams by remember(food.id) { mutableIntStateOf(parsedDefault ?: 100) }
+    var userHasModifiedGrams by remember { mutableStateOf(false) }
+
+    LaunchedEffect(food.id) {
+        val apiGrams = dataManager.getFoodDefaultGrams(food.id)
+        if (apiGrams != null && apiGrams in 1..2000 && !userHasModifiedGrams) {
+            grams = apiGrams
+        }
+    }
+
+    val unitLabel = remember(food.unit) {
+        if (food.unit?.contains(Regex("ml|мл| l| л", RegexOption.IGNORE_CASE)) == true) "мл" else "г"
+    }
+
     var selectedSlotIndex by remember {
         val initialSlot = WatchMealTimeUtils.getCurrentMealSlot()
         val index = WatchMealTimeUtils.MEAL_SLOTS.indexOfFirst { it.id == initialSlot.id }.coerceAtLeast(0)
@@ -80,7 +186,6 @@ fun AddFoodScreen(
     var isSubmitting by remember { mutableStateOf(false) }
     var submitResult by remember { mutableStateOf<Pair<Boolean, String?>?>(null) }
 
-    // Parse base energy number for scaled calculation
     val baseKcalPer100g = remember(food.energy) {
         food.energy?.replace(Regex("[^0-9.]"), "")?.toDoubleOrNull()
     }
@@ -123,11 +228,13 @@ fun AddFoodScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .onRotaryScrollEvent { event ->
+                        userHasModifiedGrams = true
                         val delta = event.verticalScrollPixels
+                        val step = calculateFineStep(grams)
                         if (delta > 0) {
-                            grams = (grams + 10).coerceAtMost(2000)
+                            grams = (grams + step).coerceAtMost(2000)
                         } else if (delta < 0) {
-                            grams = (grams - 10).coerceAtLeast(10)
+                            grams = (grams - step).coerceAtLeast(1)
                         }
                         true
                     }
@@ -141,11 +248,11 @@ fun AddFoodScreen(
                     Text(
                         text = food.title,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp,
+                        fontSize = 13.sp,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                         textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 2.dp)
                     )
                 }
 
@@ -155,66 +262,168 @@ fun AddFoodScreen(
                         val computed = (baseKcalPer100g * (grams / 100.0)).roundToInt()
                         Text(
                             text = "≈ $computed ккал",
-                            fontSize = 13.sp,
+                            fontSize = 12.sp,
                             color = MaterialTheme.colors.primary,
                             fontWeight = FontWeight.SemiBold
                         )
                     } else if (!food.energy.isNullOrBlank()) {
                         Text(
                             text = "${food.energy}",
-                            fontSize = 12.sp,
+                            fontSize = 11.sp,
                             color = Color.LightGray
                         )
                     }
                 }
 
-                // Weight display & Stepper (+ / -)
+                // Fine-tuning Drum Wheel & Stepper (+ / -)
                 item {
+                    val step = calculateFineStep(grams)
+                    val previousGrams = (grams - step).coerceAtLeast(1)
+                    val nextGrams = (grams + step).coerceAtMost(2000)
+                    var accumulatedDrag by remember { mutableFloatStateOf(0f) }
+
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 4.dp),
+                            .padding(vertical = 2.dp),
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        CompactButton(
-                            onClick = { grams = (grams - 10).coerceAtLeast(10) },
-                            colors = ButtonDefaults.secondaryButtonColors()
-                        ) {
-                            Icon(Icons.Default.Remove, contentDescription = "-10g")
-                        }
-
-                        Text(
-                            text = "$grams г",
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            modifier = Modifier.padding(horizontal = 16.dp)
+                        RepeatingButton(
+                            icon = Icons.Default.Remove,
+                            contentDescription = "-$step",
+                            onSingleClick = {
+                                userHasModifiedGrams = true
+                                grams = (grams - calculateFineStep(grams)).coerceAtLeast(1)
+                            },
+                            onRepeatStep = {
+                                userHasModifiedGrams = true
+                                val prev = if (grams % 50 == 0) grams - 50 else (grams / 50) * 50
+                                grams = prev.coerceAtLeast(1)
+                            }
                         )
 
-                        CompactButton(
-                            onClick = { grams = (grams + 10).coerceAtMost(2000) },
-                            colors = ButtonDefaults.secondaryButtonColors()
+                        // Alarm-clock style vertical drum picker
+                        Column(
+                            modifier = Modifier
+                                .width(96.dp)
+                                .padding(horizontal = 4.dp)
+                                .pointerInput(grams) {
+                                    detectVerticalDragGestures(
+                                        onDragStart = { accumulatedDrag = 0f },
+                                        onDragEnd = { accumulatedDrag = 0f },
+                                        onDragCancel = { accumulatedDrag = 0f },
+                                        onVerticalDrag = { change, dragAmount ->
+                                            userHasModifiedGrams = true
+                                            accumulatedDrag += dragAmount
+                                            val thresholdPx = 16f
+                                            while (accumulatedDrag <= -thresholdPx) {
+                                                val s = calculateFineStep(grams)
+                                                grams = (grams + s).coerceAtMost(2000)
+                                                accumulatedDrag += thresholdPx
+                                            }
+                                            while (accumulatedDrag >= thresholdPx) {
+                                                val s = calculateFineStep(grams)
+                                                grams = (grams - s).coerceAtLeast(1)
+                                                accumulatedDrag -= thresholdPx
+                                            }
+                                            change.consume()
+                                        }
+                                    )
+                                },
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Icon(Icons.Default.Add, contentDescription = "+10g")
+                            Text(
+                                text = if (previousGrams != grams) "$previousGrams" else "",
+                                fontSize = 11.sp,
+                                color = Color(0x66FFFFFF),
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.clickable {
+                                    userHasModifiedGrams = true
+                                    grams = previousGrams
+                                }
+                            )
+
+                            Box(
+                                modifier = Modifier
+                                    .padding(vertical = 1.dp)
+                                    .background(Color(0x2264FFDA), shape = RoundedCornerShape(8.dp))
+                                    .padding(horizontal = 8.dp, vertical = 2.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "$grams $unitLabel",
+                                    fontSize = 20.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = MaterialTheme.colors.primary,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+
+                            Text(
+                                text = if (nextGrams != grams) "$nextGrams" else "",
+                                fontSize = 11.sp,
+                                color = Color(0x66FFFFFF),
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.clickable {
+                                    userHasModifiedGrams = true
+                                    grams = nextGrams
+                                }
+                            )
                         }
+
+                        RepeatingButton(
+                            icon = Icons.Default.Add,
+                            contentDescription = "+$step",
+                            onSingleClick = {
+                                userHasModifiedGrams = true
+                                grams = (grams + calculateFineStep(grams)).coerceAtMost(2000)
+                            },
+                            onRepeatStep = {
+                                userHasModifiedGrams = true
+                                val next = if (grams % 50 == 0) grams + 50 else ((grams / 50) + 1) * 50
+                                grams = next.coerceAtMost(2000)
+                            }
+                        )
                     }
                 }
 
-                // Quick Gram chips
+                // Horizontal scrollable quick preset chips
                 item {
-                    Row(
+                    val presetList = remember(grams) { getGramPresets(grams) }
+                    val rowState = rememberLazyListState()
+
+                    LaunchedEffect(grams) {
+                        val index = presetList.indexOf(grams)
+                        if (index >= 0) {
+                            rowState.animateScrollToItem((index - 1).coerceAtLeast(0))
+                        }
+                    }
+
+                    LazyRow(
+                        state = rowState,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceEvenly
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp)
                     ) {
-                        listOf(50, 100, 150, 200).forEach { presetGrams ->
+                        items(presetList) { preset ->
                             CompactChip(
-                                onClick = { grams = presetGrams },
-                                label = { Text("$presetGrams", fontSize = 11.sp) },
+                                onClick = {
+                                    userHasModifiedGrams = true
+                                    grams = preset
+                                },
+                                label = {
+                                    Text(
+                                        text = "$preset",
+                                        fontSize = 11.sp,
+                                        fontWeight = if (grams == preset) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                },
                                 colors = ChipDefaults.chipColors(
-                                    backgroundColor = if (grams == presetGrams) MaterialTheme.colors.primary else Color(0xFF26262B),
-                                    contentColor = if (grams == presetGrams) Color.Black else Color.White
+                                    backgroundColor = if (grams == preset) MaterialTheme.colors.primary else Color(0xFF26262B),
+                                    contentColor = if (grams == preset) Color.Black else Color.White
                                 )
                             )
                         }
@@ -228,7 +437,7 @@ fun AddFoodScreen(
                     Chip(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                            .padding(horizontal = 14.dp, vertical = 2.dp),
                         onClick = {
                             selectedSlotIndex = (selectedSlotIndex + 1) % slots.size
                         },
@@ -256,7 +465,7 @@ fun AddFoodScreen(
                     Button(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                            .padding(horizontal = 14.dp, vertical = 4.dp),
                         onClick = {
                             if (isSubmitting) return@Button
                             isSubmitting = true

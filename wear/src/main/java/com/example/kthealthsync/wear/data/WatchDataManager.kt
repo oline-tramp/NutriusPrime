@@ -32,6 +32,7 @@ import retrofit2.http.Header
 import retrofit2.http.POST
 import retrofit2.http.Query
 import java.util.concurrent.TimeUnit
+import kotlin.math.roundToInt
 
 private const val TAG = "WatchDataManager"
 private const val PREFS_NAME = "nutrius_wear_prefs"
@@ -74,6 +75,26 @@ data class DirectAddResponse(
     val message: String?
 )
 
+data class DirectFoodFormUnitOption(
+    val id: String?,
+    val title: String?,
+    val multiplier: Double?
+)
+
+data class DirectFoodFormData(
+    val title: String?,
+    val url: String?,
+    val unitGuid: String?,
+    val multiplier: Double?,
+    val unitOptions: List<DirectFoodFormUnitOption>?
+)
+
+data class DirectFoodFormResponse(
+    val code: Int?,
+    val message: String?,
+    val data: DirectFoodFormData?
+)
+
 interface DirectKtApi {
     @GET("autocomplete/foodstuff-activity-meal?format=json")
     suspend fun searchFood(
@@ -83,6 +104,14 @@ interface DirectKtApi {
         @Header("User-Agent") userAgent: String = KT_USER_AGENT,
         @Header("Accept") accept: String = KT_ACCEPT
     ): List<DirectSearchItem>
+
+    @GET("user/foodstuff/add/form/{guid}?format=json")
+    suspend fun getFoodForm(
+        @retrofit2.http.Path("guid") guid: String,
+        @Header("Cookie") cookie: String,
+        @Header("User-Agent") userAgent: String = KT_USER_AGENT,
+        @Header("Accept") accept: String = KT_ACCEPT
+    ): DirectFoodFormResponse
 
     @POST("user/foodstuff/add?format=json")
     suspend fun addFoodstuff(
@@ -338,5 +367,24 @@ class WatchDataManager(private val context: Context) :
         }
 
         return WearAddFoodResult(false, "Нет соединения с телефоном или сетью")
+    }
+
+    suspend fun getFoodDefaultGrams(guid: String): Int? {
+        val currentCookie = _cookie.value
+        if (currentCookie.isNotBlank()) {
+            return try {
+                val resp = directApi.getFoodForm(guid, currentCookie)
+                val opts = resp.data?.unitOptions ?: emptyList()
+                val nonGram = opts.firstOrNull { it.multiplier != null && it.multiplier != 1.0 }
+                val defaultPortion = nonGram?.multiplier ?: resp.data?.multiplier
+                if (defaultPortion != null && defaultPortion > 0) {
+                    defaultPortion.roundToInt()
+                } else null
+            } catch (e: Exception) {
+                Log.w(TAG, "getFoodDefaultGrams failed: ${e.message}")
+                null
+            }
+        }
+        return null
     }
 }
