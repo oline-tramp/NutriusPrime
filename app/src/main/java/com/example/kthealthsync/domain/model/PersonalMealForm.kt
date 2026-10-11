@@ -46,6 +46,10 @@ class PersonalMealForm(private val data: JsonObject) {
         if (requireNotNull(unit.multiplier) > 0) request.addProperty("count", amount * unit.multiplier)
         else request.add("count", JsonNull.INSTANCE)
         var kcal = 0.0
+        var prot = 0.0
+        var carbs = 0.0
+        var fat = 0.0
+        var fiber = 0.0
         request.getAsJsonArray("foodstuff").forEach {
             val ingredient = it.asJsonObject
             val selected = ingredient.get("selected")?.asBoolean == true
@@ -59,12 +63,25 @@ class PersonalMealForm(private val data: JsonObject) {
             val ingredientUnit = ingredient.getAsJsonArray("units").firstOrNull { u -> u.asJsonObject.get("id").asString == selectedId }
             requireNotNull(ingredientUnit) { "Ingredient has no matching unit" }
             val multiplier = ingredientUnit.asJsonObject.number("multiplier") ?: 1.0
-            kcal += (ingredient.number("energy") ?: 0.0) * count * multiplier
+            val factorCount = count * multiplier
+            kcal += (ingredient.number("energy") ?: 0.0) * factorCount
+            prot += (ingredient.number("protein") ?: ingredient.number("proteins") ?: 0.0) * factorCount
+            carbs += (ingredient.number("carbohydrate") ?: ingredient.number("carbohydrates") ?: 0.0) * factorCount
+            fat += (ingredient.number("fat") ?: ingredient.number("fats") ?: 0.0) * factorCount
+            fiber += (ingredient.number("fiber") ?: 0.0) * factorCount
         }
-        return MealPortion(request, kcal, weight * factor)
+        return MealPortion(request, kcal, weight * factor, prot, carbs, fat, fiber)
     }
 }
 
-data class MealPortion(val request: JsonObject, val kcal: Double, val grams: Double)
+data class MealPortion(
+    val request: JsonObject,
+    val kcal: Double,
+    val grams: Double,
+    val protein: Double = 0.0,
+    val carbs: Double = 0.0,
+    val fat: Double = 0.0,
+    val fiber: Double = 0.0
+)
 
 private fun JsonObject.number(key: String): Double? = get(key)?.takeUnless { it.isJsonNull }?.asDouble

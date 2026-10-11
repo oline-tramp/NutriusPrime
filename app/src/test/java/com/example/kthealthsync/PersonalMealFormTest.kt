@@ -44,4 +44,26 @@ class PersonalMealFormTest {
         }
         assertTrue(runCatching { form().portion("unknown", 1.0, "16.09.2026", "3") }.isFailure)
     }
+
+    @Test fun portionCalculatesMacrosFromIngredients() {
+        val json = """
+            {"guid":"meal","title":"Complex Dish","portionsMax":2,"selectedUnitGuid":"g","selectedUnitMultiplier":500,
+             "units":[{"id":"portion","title":"porce","multiplier":-2},{"id":"percent","title":"%","multiplier":-1},{"id":"g","title":"1 g","multiplier":1}],
+             "foodstuff":[
+              {"guid":"c1","selected":true,"countOriginal":2,"count":2,"weight":200,"energy":1.5,"protein":0.2,"carbohydrate":0.3,"fat":0.05,"fiber":0.02,"selectedUnitGuid":"100g","units":[{"id":"100g","multiplier":100}]},
+              {"guid":"c2","selected":true,"countOriginal":300,"count":300,"weight":300,"energy":1.0,"protein":0.1,"carbohydrate":0.05,"fat":0.02,"fiber":0.01,"selectedUnitGuid":"g","units":[{"id":"g","multiplier":1}]}
+             ]}
+        """.trimIndent()
+        val form = PersonalMealForm(JsonParser().parse(json).asJsonObject)
+        val halfPortion = form.portion("percent", 50.0, "11.10.2026", "3")
+        // c1: count = 1.0 * 100 = 100 factorCount -> kcal: 150, prot: 20, carbs: 30, fat: 5, fiber: 2
+        // c2: count = 150 * 1 = 150 factorCount -> kcal: 150, prot: 15, carbs: 7.5, fat: 3, fiber: 1.5
+        // total: kcal: 300, prot: 35, carbs: 37.5, fat: 8, fiber: 3.5, grams: 250
+        assertEquals(300.0, halfPortion.kcal, 0.001)
+        assertEquals(250.0, halfPortion.grams, 0.001)
+        assertEquals(35.0, halfPortion.protein, 0.001)
+        assertEquals(37.5, halfPortion.carbs, 0.001)
+        assertEquals(8.0, halfPortion.fat, 0.001)
+        assertEquals(3.5, halfPortion.fiber, 0.001)
+    }
 }

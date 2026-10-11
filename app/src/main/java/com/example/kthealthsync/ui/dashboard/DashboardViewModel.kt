@@ -325,6 +325,50 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    suspend fun getPersonalMealForm(guid: String): com.example.kthealthsync.domain.model.PersonalMealForm =
+        repository.getPersonalMealForm(guid)
+
+    fun addPersonalMeal(
+        request: com.google.gson.JsonObject,
+        onComplete: ((Boolean) -> Unit)? = null
+    ) {
+        viewModelScope.launch {
+            try {
+                val resp = repository.addPersonalMeal(request)
+                if (resp.code == 0 || resp.code == null) {
+                    loadDailyData(silent = true)
+                    onComplete?.invoke(true)
+                } else {
+                    DebugLogger.addActionLog("addPersonalMeal failed: ${resp.message}")
+                    onComplete?.invoke(false)
+                }
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                DebugLogger.addActionLog("addPersonalMeal error: ${e.message}")
+                onComplete?.invoke(false)
+            }
+        }
+    }
+
+    fun editPersonalMealEntry(
+        oldEntryId: String,
+        request: com.google.gson.JsonObject,
+        onComplete: (DiaryEditResult) -> Unit
+    ) {
+        viewModelScope.launch {
+            val result = try {
+                repository.editPersonalMealEntry(oldEntryId, request)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                DebugLogger.addActionLog("editPersonalMealEntry error: ${e.message}")
+                DiaryEditResult.ADD_FAILED
+            }
+            loadDailyData(silent = true)
+            onComplete(result)
+        }
+    }
+
     fun cloneEntries(
         foods: List<Foodstuff>,
         targetTimeId: String,

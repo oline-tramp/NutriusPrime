@@ -27,7 +27,9 @@ import com.example.kthealthsync.Foodstuff
 import com.example.kthealthsync.UnitOption
 import com.example.kthealthsync.domain.model.DiaryEditResult
 import com.example.kthealthsync.domain.model.LocalAppStrings
+import com.example.kthealthsync.domain.model.MealPortion
 import com.example.kthealthsync.domain.model.NutrientGoals
+import com.example.kthealthsync.domain.model.PersonalMealForm
 import com.example.kthealthsync.domain.util.MealTimeUtils
 import com.example.kthealthsync.domain.util.NutrientParser
 import java.time.LocalDate
@@ -165,40 +167,79 @@ fun EditFoodDialog(
         mutableDoubleStateOf(NutrientParser.parseNutrient(food.salt) / portionGrams * 100.0)
     }
 
-    val productGuid = food.guidType ?: food.guid ?: food.guidRecipe ?: ""
+    val isPersonalMealCandidate = food.isRecipe == true ||
+            !food.components.isNullOrEmpty() ||
+            !food.guidRecipe.isNullOrBlank() ||
+            food.type == "meal" ||
+            food.guidType == "meal"
+
+    val recipeGuid = food.guidRecipe ?: food.guid ?: food.guidType ?: ""
+    val productGuid = if (isPersonalMealCandidate && recipeGuid.isNotBlank()) recipeGuid
+        else (food.guidType ?: food.guid ?: food.guidRecipe ?: "")
+
+    var personalMealForm by remember { mutableStateOf<PersonalMealForm?>(null) }
+
+    suspend fun loadStandardFoodForm(guid: String) {
+        val res = viewModel.getFoodForm(guid)
+        val opts = res.data?.unitOptions ?: emptyList()
+        unitOptions = opts
+
+        if (opts.isNotEmpty()) {
+            val matchedOpt = if (!parsedInitUnit.isNullOrBlank()) {
+                opts.find { opt ->
+                    val optTitle = (opt.title ?: "").lowercase()
+                    optTitle.contains(parsedInitUnit.lowercase()) ||
+                            parsedInitUnit.lowercase().contains(optTitle)
+                }
+            } else null
+
+            selectedUnit = matchedOpt ?: opts.find { it.multiplier == 1.0 } ?: opts.first()
+        }
+
+        if (!food.url.isNullOrBlank()) {
+            val macros = viewModel.getFoodMacros(food.url, res.data?.url)
+            if (macros.isNotEmpty()) {
+                macros["energie"]?.let { energyPer100 = it }
+                macros["bílkoviny"]?.let { proteinPer100 = it }
+                macros["sacharidy"]?.let { carbsPer100 = it }
+                macros["tuky"]?.let { fatPer100 = it }
+                macros["vláknina"]?.let { fiberPer100 = it }
+                macros["cukry"]?.let { sugarPer100 = it }
+                macros["sůl"]?.let { saltPer100 = it }
+            }
+        }
+    }
 
     LaunchedEffect(productGuid) {
         if (productGuid.isNotBlank()) {
             try {
-                val res = viewModel.getFoodForm(productGuid)
-                val opts = res.data?.unitOptions ?: emptyList()
-                unitOptions = opts
+                if (isPersonalMealCandidate) {
+                    try {
+                        val form = viewModel.getPersonalMealForm(productGuid)
+                        personalMealForm = form
+                        unitOptions = form.units
 
-                if (opts.isNotEmpty()) {
-                    // Try to match the parsed unit
-                    val matchedOpt = if (!parsedInitUnit.isNullOrBlank()) {
-                        opts.find { opt ->
-                            val optTitle = (opt.title ?: "").lowercase()
-                            optTitle.contains(parsedInitUnit.lowercase()) ||
-                                    parsedInitUnit.lowercase().contains(optTitle)
+                        val matchedOpt = if (!food.unit.isNullOrBlank()) {
+                            val unitLower = food.unit.lowercase()
+                            when {
+                                unitLower.contains("%") -> form.units.find { it.multiplier == -1.0 }
+                                unitLower.contains("porce") || unitLower.contains("porc") || unitLower.contains("portion") ->
+                                    form.units.find { it.multiplier == -2.0 }
+                                unitLower.contains("g") -> form.units.find { it.multiplier == 1.0 } ?: form.units.find { it.multiplier != null && it.multiplier > 0 }
+                                else -> null
+                            }
+                        } else null
+
+                        selectedUnit = matchedOpt ?: form.defaultUnit
+
+                        if (amountText.isBlank() || amountText == "100") {
+                            amountText = formatAmount(form.defaultAmount)
                         }
-                    } else null
-
-                    selectedUnit = matchedOpt ?: opts.find { it.multiplier == 1.0 } ?: opts.first()
-                }
-
-                // If web macros are available, supplement per 100g density
-                if (!food.url.isNullOrBlank()) {
-                    val macros = viewModel.getFoodMacros(food.url, res.data?.url)
-                    if (macros.isNotEmpty()) {
-                        macros["energie"]?.let { energyPer100 = it }
-                        macros["bílkoviny"]?.let { proteinPer100 = it }
-                        macros["sacharidy"]?.let { carbsPer100 = it }
-                        macros["tuky"]?.let { fatPer100 = it }
-                        macros["vláknina"]?.let { fiberPer100 = it }
-                        macros["cukry"]?.let { sugarPer100 = it }
-                        macros["sůl"]?.let { saltPer100 = it }
+                    } catch (e: Exception) {
+                        loadStandardFoodForm(productGuid)
                     }
+                } else {
+                    loadStandardFoodForm(productGuid)
                 }
             } catch (e: Exception) {
                 // If form load fails, construct fallback unit options
@@ -223,11 +264,59 @@ fun EditFoodDialog(
     val totalEffectiveGrams = currentAmountVal * currentMultiplier
     val scaleFactor = totalEffectiveGrams / 100.0
 
-    val previewKcal = (energyPer100 * scaleFactor).toInt()
-    val previewProt = (proteinPer100 * scaleFactor)
-    val previewCarbs = (carbsPer100 * scaleFactor)
-    val previewFat = (fatPer100 * scaleFactor)
-    val previewFiber = (fiberPer100 * scaleFactor)
+    val currentMealPortion = remember(personalMealForm, selectedUnit, currentAmountVal, targetDate, selectedTimeGuid) {
+        if (personalMealForm != null && selectedUnit != null && currentAmountVal > 0) {
+            runCatching {
+                personalMealForm!!.portion(
+                    selectedUnit!!.id ?: "",
+                    currentAmountVal,
+                    targetDate.format(formatter),
+                    selectedTimeGuid
+                )
+            }.getOrNull()
+        } else null
+    }
+
+    val previewKcal = when {
+        currentMealPortion != null -> currentMealPortion.kcal.toInt()
+        else -> (energyPer100 * scaleFactor).toInt()
+    }
+    val previewProt = when {
+        currentMealPortion != null && currentMealPortion.protein > 0 -> currentMealPortion.protein
+        currentMealPortion != null && NutrientParser.parseNutrient(food.energy) > 0 -> {
+            val ratio = currentMealPortion.kcal / NutrientParser.parseNutrient(food.energy)
+            NutrientParser.parseNutrient(food.protein) * ratio
+        }
+        currentMealPortion != null -> 0.0
+        else -> (proteinPer100 * scaleFactor)
+    }
+    val previewCarbs = when {
+        currentMealPortion != null && currentMealPortion.carbs > 0 -> currentMealPortion.carbs
+        currentMealPortion != null && NutrientParser.parseNutrient(food.energy) > 0 -> {
+            val ratio = currentMealPortion.kcal / NutrientParser.parseNutrient(food.energy)
+            NutrientParser.parseNutrient(food.carbohydrate) * ratio
+        }
+        currentMealPortion != null -> 0.0
+        else -> (carbsPer100 * scaleFactor)
+    }
+    val previewFat = when {
+        currentMealPortion != null && currentMealPortion.fat > 0 -> currentMealPortion.fat
+        currentMealPortion != null && NutrientParser.parseNutrient(food.energy) > 0 -> {
+            val ratio = currentMealPortion.kcal / NutrientParser.parseNutrient(food.energy)
+            NutrientParser.parseNutrient(food.fat) * ratio
+        }
+        currentMealPortion != null -> 0.0
+        else -> (fatPer100 * scaleFactor)
+    }
+    val previewFiber = when {
+        currentMealPortion != null && currentMealPortion.fiber > 0 -> currentMealPortion.fiber
+        currentMealPortion != null && NutrientParser.parseNutrient(food.energy) > 0 -> {
+            val ratio = currentMealPortion.kcal / NutrientParser.parseNutrient(food.energy)
+            NutrientParser.parseNutrient(food.fiber) * ratio
+        }
+        currentMealPortion != null -> 0.0
+        else -> (fiberPer100 * scaleFactor)
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -325,6 +414,9 @@ fun EditFoodDialog(
                                             onClick = {
                                                 selectedUnit = opt
                                                 unitExpanded = false
+                                                if (personalMealForm != null) {
+                                                    amountText = formatAmount(personalMealForm!!.suggestedAmount(opt))
+                                                }
                                             }
                                         )
                                     }
@@ -480,6 +572,32 @@ fun EditFoodDialog(
                     errorMsg = null
 
                     coroutineScope.launch {
+                        if (personalMealForm != null && currentMealPortion != null) {
+                            if (isClone) {
+                                viewModel.addPersonalMeal(currentMealPortion.request) { success ->
+                                    isSubmitting = false
+                                    if (success) {
+                                        onSuccess()
+                                    } else {
+                                        errorMsg = strings.cloneError
+                                    }
+                                }
+                            } else {
+                                viewModel.editPersonalMealEntry(
+                                    oldEntryId = food.id ?: "",
+                                    request = currentMealPortion.request
+                                ) { result ->
+                                    isSubmitting = false
+                                    when (result) {
+                                        DiaryEditResult.SUCCESS -> onSuccess()
+                                        DiaryEditResult.ADD_FAILED -> errorMsg = strings.saveError
+                                        DiaryEditResult.DELETE_FAILED -> needsOldEntryRemoval = true
+                                    }
+                                }
+                            }
+                            return@launch
+                        }
+
                         val unitGuid = selectedUnit?.id ?: "0000000000000001"
                         val unitMult = selectedUnit?.multiplier ?: 1.0
                         val unitTitle = selectedUnit?.title ?: "1 g"
@@ -526,7 +644,7 @@ fun EditFoodDialog(
                         }
                     }
                 },
-                enabled = !isLoadingOptions && !isSubmitting && amountText.isNotBlank(),
+                enabled = !isLoadingOptions && !isSubmitting && amountText.isNotBlank() && (personalMealForm == null || currentMealPortion != null),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = if (isClone) Color(0xFF2E7D32) else MaterialTheme.colorScheme.primary,
                     contentColor = if (isClone) Color.White else Color.Black

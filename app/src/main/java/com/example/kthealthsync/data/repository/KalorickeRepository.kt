@@ -128,7 +128,8 @@ class KalorickeRepository(
         val allFoodstuffs = rawFoods.map { f ->
             val name = f.title ?: f.name ?: f.nazev
             val guid = f.guid ?: f.guidRecipe ?: mealMap[name]
-            if (guid != null && (mealMap.containsValue(guid) || mealMap.containsKey(name))) {
+            val isMeal = f.guidRecipe != null || (guid != null && (mealMap.containsValue(guid) || mealMap.containsKey(name)))
+            if (isMeal && guid != null) {
                 val recipeData = getRecipeDetail(guid, cookie)
                 if (recipeData != null) {
                     val recipeEnergy = NutrientParser.parseNutrient(recipeData.energy)
@@ -153,7 +154,12 @@ class KalorickeRepository(
                             )
                         }
                     }
-                    f.copy(components = components, isRecipe = true)
+                    f.copy(
+                        components = components,
+                        isRecipe = true,
+                        guid = f.guid ?: guid,
+                        guidRecipe = f.guidRecipe ?: guid
+                    )
                 } else f
             } else f
         }
@@ -384,6 +390,17 @@ class KalorickeRepository(
         executeWithRetry(operationName = "addPersonalMeal", retryTransientErrors = false) { cookie ->
             api.addPersonalMeal(request, cookie)
         }
+
+    suspend fun editPersonalMealEntry(oldEntryId: String, request: com.google.gson.JsonObject): com.example.kthealthsync.domain.model.DiaryEditResult {
+        require(oldEntryId.isNotBlank()) { "Missing diary entry ID" }
+        val response = addPersonalMeal(request)
+        if (response.code != null && response.code != 0) return com.example.kthealthsync.domain.model.DiaryEditResult.ADD_FAILED
+        return if (deleteDiaryEntries(setOf(oldEntryId)).isSuccess) {
+            com.example.kthealthsync.domain.model.DiaryEditResult.SUCCESS
+        } else {
+            com.example.kthealthsync.domain.model.DiaryEditResult.DELETE_FAILED
+        }
+    }
 
     suspend fun searchFood(
         query: String,
