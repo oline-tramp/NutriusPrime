@@ -369,6 +369,26 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    suspend fun isPersonalMeal(food: Foodstuff): Boolean {
+        if (food.isRecipe == true || !food.components.isNullOrEmpty() || !food.guidRecipe.isNullOrBlank()) return true
+        val cookie = repository.getCookie()
+        if (cookie.isEmpty()) return false
+        val mealMap = repository.getMealMap(cookie)
+        val name = food.title ?: food.name ?: food.nazev ?: ""
+        val guid = food.guid ?: food.guidRecipe ?: ""
+        return mealMap.containsKey(name) || (guid.isNotBlank() && mealMap.containsValue(guid))
+    }
+
+    suspend fun getPersonalMealGuid(food: Foodstuff): String? {
+        val guid = food.guidRecipe ?: food.guid
+        val cookie = repository.getCookie()
+        if (cookie.isEmpty()) return guid
+        val mealMap = repository.getMealMap(cookie)
+        val name = food.title ?: food.name ?: food.nazev ?: ""
+        return if (guid != null && mealMap.containsValue(guid)) guid
+            else mealMap[name] ?: guid
+    }
+
     fun cloneEntries(
         foods: List<Foodstuff>,
         targetTimeId: String,

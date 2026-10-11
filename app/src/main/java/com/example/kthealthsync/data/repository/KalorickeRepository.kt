@@ -123,46 +123,49 @@ class KalorickeRepository(
         val cookie = getCookie()
         val mealMap = getMealMap(cookie)
         val times = checkNotNull(diaryResponse.data?.times) { "Diary response is missing meal data" }
-        val rawFoods = times.flatMap { it.foodstuff ?: emptyList() }
+        val enrichedTimes = times.map { time ->
+            val enrichedFoodstuff = time.foodstuff?.map { f ->
+                val name = f.title ?: f.name ?: f.nazev
+                val guid = f.guid ?: f.guidRecipe ?: mealMap[name]
+                val isMeal = f.guidRecipe != null || (guid != null && (mealMap.containsValue(guid) || mealMap.containsKey(name)))
+                if (isMeal && guid != null) {
+                    val recipeData = getRecipeDetail(guid, cookie)
+                    if (recipeData != null) {
+                        val recipeEnergy = NutrientParser.parseNutrient(recipeData.energy)
+                        val loggedEnergy = NutrientParser.parseNutrient(f.energy)
+                        val scale = if (recipeEnergy > 0) loggedEnergy / recipeEnergy else 1.0
 
-        val allFoodstuffs = rawFoods.map { f ->
-            val name = f.title ?: f.name ?: f.nazev
-            val guid = f.guid ?: f.guidRecipe ?: mealMap[name]
-            val isMeal = f.guidRecipe != null || (guid != null && (mealMap.containsValue(guid) || mealMap.containsKey(name)))
-            if (isMeal && guid != null) {
-                val recipeData = getRecipeDetail(guid, cookie)
-                if (recipeData != null) {
-                    val recipeEnergy = NutrientParser.parseNutrient(recipeData.energy)
-                    val loggedEnergy = NutrientParser.parseNutrient(f.energy)
-                    val scale = if (recipeEnergy > 0) loggedEnergy / recipeEnergy else 1.0
-
-                    val components = recipeData.content?.mapNotNull { item ->
-                        item.foodstuff?.let { compFood ->
-                            val origUnit = item.unit ?: compFood.unit
-                            val origGrams = NutrientParser.parsePortionGrams(origUnit)
-                            val scaledUnit = if (origGrams > 0) "${String.format(Locale.US, "%.1f", origGrams * scale)} g" else origUnit
-                            compFood.copy(
-                                unit = scaledUnit,
-                                protein = NutrientCalculator.scaleNutrient(compFood.protein, scale),
-                                fat = NutrientCalculator.scaleNutrient(compFood.fat, scale),
-                                carbohydrate = NutrientCalculator.scaleNutrient(compFood.carbohydrate, scale),
-                                sugar = NutrientCalculator.scaleNutrient(compFood.sugar, scale),
-                                salt = NutrientCalculator.scaleNutrient(compFood.salt, scale),
-                                fiber = NutrientCalculator.scaleNutrient(compFood.fiber, scale),
-                                water = NutrientCalculator.scaleNutrient(compFood.water, scale),
-                                energy = NutrientCalculator.scaleNutrient(compFood.energy, scale)
-                            )
+                        val components = recipeData.content?.mapNotNull { item ->
+                            item.foodstuff?.let { compFood ->
+                                val origUnit = item.unit ?: compFood.unit
+                                val origGrams = NutrientParser.parsePortionGrams(origUnit)
+                                val scaledUnit = if (origGrams > 0) "${String.format(Locale.US, "%.1f", origGrams * scale)} g" else origUnit
+                                compFood.copy(
+                                    unit = scaledUnit,
+                                    protein = NutrientCalculator.scaleNutrient(compFood.protein, scale),
+                                    fat = NutrientCalculator.scaleNutrient(compFood.fat, scale),
+                                    carbohydrate = NutrientCalculator.scaleNutrient(compFood.carbohydrate, scale),
+                                    sugar = NutrientCalculator.scaleNutrient(compFood.sugar, scale),
+                                    salt = NutrientCalculator.scaleNutrient(compFood.salt, scale),
+                                    fiber = NutrientCalculator.scaleNutrient(compFood.fiber, scale),
+                                    water = NutrientCalculator.scaleNutrient(compFood.water, scale),
+                                    energy = NutrientCalculator.scaleNutrient(compFood.energy, scale)
+                                )
+                            }
                         }
-                    }
-                    f.copy(
-                        components = components,
-                        isRecipe = true,
-                        guid = f.guid ?: guid,
-                        guidRecipe = f.guidRecipe ?: guid
-                    )
+                        f.copy(
+                            components = components,
+                            isRecipe = true,
+                            guid = f.guid ?: guid,
+                            guidRecipe = f.guidRecipe ?: guid
+                        )
+                    } else f
                 } else f
-            } else f
+            }
+            time.copy(foodstuff = enrichedFoodstuff)
         }
+
+        val allFoodstuffs = enrichedTimes.flatMap { it.foodstuff ?: emptyList() }
 
         // Preload categories for all individual foods and recipe ingredients in parallel
         val leafFoods = mutableListOf<Foodstuff>()
@@ -243,7 +246,10 @@ class KalorickeRepository(
             supplementBreakdown = supplementBreakdown
         )
 
-        return summary to diaryResponse
+        val enrichedDiaryResponse = diaryResponse.copy(
+            data = diaryResponse.data?.copy(times = enrichedTimes)
+        )
+        return summary to enrichedDiaryResponse
     }
 
     fun getFoodCategorySync(food: Foodstuff): FoodCategory {

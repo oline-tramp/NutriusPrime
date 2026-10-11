@@ -182,19 +182,20 @@ fun EditFoodDialog(
     suspend fun loadStandardFoodForm(guid: String) {
         val res = viewModel.getFoodForm(guid)
         val opts = res.data?.unitOptions ?: emptyList()
+        if (opts.isEmpty()) {
+            throw IllegalStateException("Food form returned no unit options")
+        }
         unitOptions = opts
 
-        if (opts.isNotEmpty()) {
-            val matchedOpt = if (!parsedInitUnit.isNullOrBlank()) {
-                opts.find { opt ->
-                    val optTitle = (opt.title ?: "").lowercase()
-                    optTitle.contains(parsedInitUnit.lowercase()) ||
-                            parsedInitUnit.lowercase().contains(optTitle)
-                }
-            } else null
+        val matchedOpt = if (!parsedInitUnit.isNullOrBlank()) {
+            opts.find { opt ->
+                val optTitle = (opt.title ?: "").lowercase()
+                optTitle.contains(parsedInitUnit.lowercase()) ||
+                        parsedInitUnit.lowercase().contains(optTitle)
+            }
+        } else null
 
-            selectedUnit = matchedOpt ?: opts.find { it.multiplier == 1.0 } ?: opts.first()
-        }
+        selectedUnit = matchedOpt ?: opts.find { it.multiplier == 1.0 } ?: opts.first()
 
         if (!food.url.isNullOrBlank()) {
             val macros = viewModel.getFoodMacros(food.url, res.data?.url)
@@ -210,12 +211,21 @@ fun EditFoodDialog(
         }
     }
 
-    LaunchedEffect(productGuid) {
-        if (productGuid.isNotBlank()) {
+    LaunchedEffect(food) {
+        val candidateGuid = food.guidRecipe?.takeIf { it.isNotBlank() }
+            ?: food.guidType?.takeIf { it.isNotBlank() }
+            ?: food.guid?.takeIf { it.isNotBlank() }
+            ?: ""
+
+        if (candidateGuid.isNotBlank() || isPersonalMealCandidate) {
             try {
-                if (isPersonalMealCandidate) {
+                val isMeal = isPersonalMealCandidate || viewModel.isPersonalMeal(food)
+                if (isMeal) {
                     try {
-                        val form = viewModel.getPersonalMealForm(productGuid)
+                        val mealGuid = food.guidRecipe?.takeIf { it.isNotBlank() }
+                            ?: viewModel.getPersonalMealGuid(food)
+                            ?: candidateGuid
+                        val form = viewModel.getPersonalMealForm(mealGuid)
                         personalMealForm = form
                         unitOptions = form.units
 
@@ -236,18 +246,29 @@ fun EditFoodDialog(
                             amountText = formatAmount(form.defaultAmount)
                         }
                     } catch (e: Exception) {
-                        loadStandardFoodForm(productGuid)
+                        loadStandardFoodForm(candidateGuid)
                     }
                 } else {
-                    loadStandardFoodForm(productGuid)
+                    loadStandardFoodForm(candidateGuid)
                 }
             } catch (e: Exception) {
-                // If form load fails, construct fallback unit options
-                unitOptions = listOf(
-                    FoodFormUnitOption("0000000000000001", "1 g", 1.0),
-                    FoodFormUnitOption("100g", "100 g", 100.0)
-                )
-                selectedUnit = unitOptions.first()
+                // If standard food form failed or had no units, attempt personal meal form:
+                try {
+                    val mealGuid = viewModel.getPersonalMealGuid(food) ?: candidateGuid
+                    val form = viewModel.getPersonalMealForm(mealGuid)
+                    personalMealForm = form
+                    unitOptions = form.units
+                    selectedUnit = form.defaultUnit
+                    if (amountText.isBlank() || amountText == "100") {
+                        amountText = formatAmount(form.defaultAmount)
+                    }
+                } catch (_: Exception) {
+                    unitOptions = listOf(
+                        FoodFormUnitOption("0000000000000001", "1 g", 1.0),
+                        FoodFormUnitOption("100g", "100 g", 100.0)
+                    )
+                    selectedUnit = unitOptions.first()
+                }
             } finally {
                 isLoadingOptions = false
             }
