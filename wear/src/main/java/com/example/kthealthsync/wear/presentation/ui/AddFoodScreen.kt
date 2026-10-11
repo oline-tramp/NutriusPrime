@@ -71,6 +71,7 @@ import com.example.kthealthsync.wear.data.WatchMealTimeUtils
 import com.example.kthealthsync.wear.data.WatchNutrientParser
 import com.example.kthealthsync.wear.data.WearAddFoodRequest
 import com.example.kthealthsync.wear.data.WearFoodItem
+import com.example.kthealthsync.wear.presentation.RotaryBus
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -211,10 +212,21 @@ fun AddFoodScreen(
         }
     }
 
-    LaunchedEffect(isDrumFocused) {
-        try {
-            focusRequester.requestFocus()
-        } catch (_: Exception) {}
+    LaunchedEffect(isDrumFocused, stepMode) {
+        RotaryBus.events.collect { delta ->
+            Log.d("AddFoodScreen", "RotaryBus event: delta=$delta, isDrumFocused=$isDrumFocused, stepMode=$stepMode")
+            if (isDrumFocused) {
+                userHasModifiedGrams = true
+                if (delta < 0) {
+                    grams = (grams + stepMode).coerceAtMost(2000)
+                } else if (delta > 0) {
+                    grams = (grams - stepMode).coerceAtLeast(1)
+                }
+            } else {
+                val scrollPixels = -delta * 80f
+                listState.scrollBy(scrollPixels)
+            }
+        }
     }
 
     Scaffold(

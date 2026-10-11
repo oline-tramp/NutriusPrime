@@ -79,4 +79,67 @@ class NutrientCalculatorTest {
         assertEquals("Banana", breakdowns[1].name)
         assertEquals(100.0, breakdowns[1].amount, 0.001)
     }
+
+    @Test
+    fun testAggregateMacroWithMealsForRecipeWithoutDirectNutrient() {
+        val carrot = Foodstuff(
+            title = "Carrot",
+            name = null,
+            nazev = null,
+            unit = "30 g",
+            isRecipe = false
+        )
+        val potato = Foodstuff(
+            title = "Potato",
+            name = null,
+            nazev = null,
+            unit = "20 g",
+            isRecipe = false
+        )
+        val salad = Foodstuff(
+            title = "Olivier Salad",
+            name = null,
+            nazev = null,
+            unit = "200 g",
+            isRecipe = true,
+            components = listOf(carrot, potato)
+        )
+
+        // Extractor mimics veg extractor: 0 for the recipe itself, but grams for carrot & potato
+        val vegExtractor: (Foodstuff) -> Double = { f ->
+            when (f.title) {
+                "Carrot" -> 30.0
+                "Potato" -> 20.0
+                else -> 0.0
+            }
+        }
+
+        val breakdownsWithMeals = NutrientCalculator.aggregateMacro(
+            listOf(salad),
+            vegExtractor,
+            withMeals = true
+        )
+
+        assertEquals(1, breakdownsWithMeals.size)
+        val recipeBreakdown = breakdownsWithMeals[0]
+        assertEquals("Olivier Salad", recipeBreakdown.name)
+        assertEquals(50.0, recipeBreakdown.amount, 0.001)
+        assertEquals(2, recipeBreakdown.components.size)
+        assertEquals("Carrot", recipeBreakdown.components[0].name)
+        assertEquals(30.0, recipeBreakdown.components[0].amount, 0.001)
+        assertEquals("Potato", recipeBreakdown.components[1].name)
+        assertEquals(20.0, recipeBreakdown.components[1].amount, 0.001)
+
+        val breakdownsWithoutMeals = NutrientCalculator.aggregateMacro(
+            listOf(salad),
+            vegExtractor,
+            withMeals = false
+        )
+
+        assertEquals(2, breakdownsWithoutMeals.size)
+        assertEquals("Carrot", breakdownsWithoutMeals[0].name)
+        assertEquals(30.0, breakdownsWithoutMeals[0].amount, 0.001)
+        assertEquals("Potato", breakdownsWithoutMeals[1].name)
+        assertEquals(20.0, breakdownsWithoutMeals[1].amount, 0.001)
+    }
 }

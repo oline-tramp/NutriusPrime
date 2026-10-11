@@ -84,7 +84,10 @@ class MainActivity : ComponentActivity() {
         if (event?.action == android.view.MotionEvent.ACTION_SCROLL &&
             event.isFromSource(android.view.InputDevice.SOURCE_ROTARY_ENCODER)
         ) {
-            android.util.Log.d("MainActivity", "Rotary motion: axis_scroll=${event.getAxisValue(android.view.MotionEvent.AXIS_SCROLL)}")
+            val delta = event.getAxisValue(android.view.MotionEvent.AXIS_SCROLL)
+            android.util.Log.d("MainActivity", "Rotary motion forwarded: axis_scroll=$delta")
+            RotaryBus.emit(delta)
+            return true
         }
         return super.onGenericMotionEvent(event)
     }

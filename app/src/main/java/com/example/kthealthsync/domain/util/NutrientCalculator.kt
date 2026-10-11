@@ -42,8 +42,9 @@ object NutrientCalculator {
 
             if (isRecipe && withMeals) {
                 val childBreakdowns = children?.let { aggregateMacro(it, extractor, false) } ?: emptyList()
-                if (value > 0 || childBreakdowns.isNotEmpty()) {
-                    result.add(FoodBreakdown(fname, value, childBreakdowns, originalFood = f))
+                val totalAmount = if (value > 0) value else childBreakdowns.sumOf { it.amount }
+                if (totalAmount > 0 || childBreakdowns.isNotEmpty()) {
+                    result.add(FoodBreakdown(fname, totalAmount, childBreakdowns, originalFood = f))
                 }
             } else if (isRecipe && !withMeals) {
                 if (!children.isNullOrEmpty()) {

@@ -50,6 +50,7 @@ import androidx.wear.compose.material.TimeText
 import com.example.kthealthsync.wear.data.WatchDataManager
 import com.example.kthealthsync.wear.data.WearFoodItem
 import com.example.kthealthsync.wear.presentation.InputHelper
+import com.example.kthealthsync.wear.presentation.RotaryBus
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -67,10 +68,10 @@ fun HomeScreen(
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
-        delay(150)
-        try {
-            focusRequester.requestFocus()
-        } catch (_: Exception) {}
+        RotaryBus.events.collect { delta ->
+            val scrollPixels = -delta * 80f
+            listState.scrollBy(scrollPixels)
+        }
     }
 
     val context = androidx.compose.ui.platform.LocalContext.current
