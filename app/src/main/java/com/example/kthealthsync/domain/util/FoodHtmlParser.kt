@@ -41,56 +41,103 @@ object FoodHtmlParser {
         return result
     }
 
+    private val CRUMB_REGEX = "class=\"crumb-link\"\\s+href=\"(/[^\"]+)\"".toRegex()
+
+    /**
+     * Extracts food category directly from Kalorické Tabulky category URL slug.
+     * Examples:
+     * - "zelenina/mrkev" -> VEGETABLE
+     * - "ovoce/jablko" -> FRUIT
+     * - "napoje/voda-neperliva" -> BEVERAGE
+     * - "doplnky-stravy/omega-3" -> SUPPLEMENT
+     * - "potraviny/brambory" -> OTHER (tuber)
+     */
+    fun parseCategoryFromUrl(url: String?, foodTitle: String? = null): FoodCategory? {
+        val cleanUrl = (url ?: "").trim().trimStart('/')
+        if (cleanUrl.isBlank()) return null
+        val lowerUrl = cleanUrl.lowercase()
+
+        // 1. Tubers exclusion (potatoes, topinambur) per WHO guidelines
+        if (lowerUrl.contains("brambor") || lowerUrl.contains("topinambur")) {
+            return FoodCategory.OTHER
+        }
+
+        // 2. Strict non-produce sections
+        if (lowerUrl.startsWith("mlecne-vyrobky") || lowerUrl.startsWith("zmrzlin") ||
+            lowerUrl.startsWith("pecivo") || lowerUrl.startsWith("cukrovinky") ||
+            lowerUrl.startsWith("maso") || lowerUrl.startsWith("sladkosti") ||
+            lowerUrl.startsWith("jidla-a-prilohy")
+        ) {
+            return FoodCategory.OTHER
+        }
+
+        // 3. Positive official KT categories
+        if (lowerUrl.startsWith("zelenina")) {
+            return FoodCategory.VEGETABLE
+        }
+        if (lowerUrl.startsWith("ovoce")) {
+            return FoodCategory.FRUIT
+        }
+        if (lowerUrl.contains("napoj")) {
+            return FoodCategory.BEVERAGE
+        }
+        if (lowerUrl.startsWith("doplnky-vyzivy") || lowerUrl.startsWith("doplnky-stravy")) {
+            val titleLower = (foodTitle ?: "").lowercase()
+            if (isProteinPowderOrBar(titleLower)) {
+                return FoodCategory.OTHER
+            }
+            return FoodCategory.SUPPLEMENT
+        }
+
+        return null
+    }
+
     /**
      * Extracts food category from official Kalorické Tabulky breadcrumb links.
      * Breadcrumbs follow patterns like:
      * - href="/zelenina" or href="/zelenina/zelenina-cerstva"
      * - href="/ovoce" or href="/ovoce/ovoce-cerstve"
-     *
-     * Starchy tubers like potatoes (/zelenina/brambory-a-topinambury or /jidla-a-prilohy/prilohy-brambory*)
-     * are excluded from the WHO 400g/day fruit & vegetable recommendation.
+     * - href="/napoje"
+     * - href="/doplnky-vyzivy"
      */
     fun parseCategoryFromHtml(html: String, foodTitle: String? = null): FoodCategory {
-        val crumbRegex = "class=\"crumb-link\"\\s+href=\"(/[^\"]+)\"".toRegex()
-        val allHrefs = crumbRegex.findAll(html).map { it.groupValues[1].lowercase() }.toList()
+        val allHrefs = if (html.isNotBlank()) {
+            CRUMB_REGEX.findAll(html).map { it.groupValues[1].lowercase() }.toList()
+        } else emptyList()
 
-        // If any crumb marks it as potatoes/topinambur, exclude from 400g quota (starchy tubers per WHO)
+        // 1. Tubers exclusion (potatoes, topinambur) per WHO guidelines across any breadcrumb
         if (allHrefs.any { it.contains("brambor") || it.contains("topinambur") }) {
             return FoodCategory.OTHER
         }
 
-        for (href in allHrefs) {
-            if (href.startsWith("/zelenina")) {
-                return FoodCategory.VEGETABLE
-            }
-            if (href.startsWith("/ovoce")) {
-                return FoodCategory.FRUIT
-            }
-            if (href.startsWith("/doplnky-vyzivy")) {
-                val titleLower = (foodTitle ?: "").lowercase()
-                if (isProteinPowderOrBar(titleLower)) {
-                    return FoodCategory.OTHER
-                }
-                return FoodCategory.SUPPLEMENT
-            }
+        // 2. Strict non-produce sections across any breadcrumb
+        if (allHrefs.any { href ->
+            href.startsWith("/mlecne-vyrobky") || href.startsWith("/zmrzlin") ||
+            href.startsWith("/pecivo") || href.startsWith("/cukrovinky") ||
+            href.startsWith("/maso") || href.startsWith("/sladkosti") ||
+            href.startsWith("/jidla-a-prilohy")
+        }) {
+            return FoodCategory.OTHER
         }
+
+        for (href in allHrefs) {
+            val cat = parseCategoryFromUrl(href, foodTitle)
+            if (cat != null) return cat
+        }
+
         return FoodCategory.OTHER
     }
 
     fun isProteinPowderOrBar(titleLower: String): Boolean {
-        if (titleLower.contains("protein") ||
-            titleLower.contains("isolate") ||
-            titleLower.contains("izolát") ||
-            titleLower.contains("izolat") ||
-            titleLower.contains("whey") ||
-            titleLower.contains("casein") ||
-            titleLower.contains("kasein") ||
-            titleLower.contains("gainer") ||
-            titleLower.contains("syrovátkový") ||
-            titleLower.contains("syrovatkovy")
-        ) {
-            return true
-        }
-        return false
+        return titleLower.contains("protein") ||
+                titleLower.contains("isolate") ||
+                titleLower.contains("izolát") ||
+                titleLower.contains("izolat") ||
+                titleLower.contains("whey") ||
+                titleLower.contains("casein") ||
+                titleLower.contains("kasein") ||
+                titleLower.contains("gainer") ||
+                titleLower.contains("syrovátkový") ||
+                titleLower.contains("syrovatkovy")
     }
 }

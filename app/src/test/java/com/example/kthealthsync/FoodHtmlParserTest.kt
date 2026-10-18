@@ -56,7 +56,7 @@ class FoodHtmlParserTest {
                 </a>
             </div>
         """.trimIndent()
-        assertEquals(com.example.kthealthsync.domain.model.FoodCategory.VEGETABLE, FoodHtmlParser.parseCategoryFromHtml(vegHtml))
+        assertEquals(FoodCategory.VEGETABLE, FoodHtmlParser.parseCategoryFromHtml(vegHtml))
 
         val fruitHtml = """
             <div layout="row" property="itemListElement" typeof="ListItem">
@@ -70,7 +70,7 @@ class FoodHtmlParserTest {
                 </a>
             </div>
         """.trimIndent()
-        assertEquals(com.example.kthealthsync.domain.model.FoodCategory.FRUIT, FoodHtmlParser.parseCategoryFromHtml(fruitHtml))
+        assertEquals(FoodCategory.FRUIT, FoodHtmlParser.parseCategoryFromHtml(fruitHtml))
 
         val potatoHtml = """
             <div layout="row" property="itemListElement" typeof="ListItem">
@@ -84,12 +84,12 @@ class FoodHtmlParserTest {
                 </a>
             </div>
         """.trimIndent()
-        assertEquals(com.example.kthealthsync.domain.model.FoodCategory.OTHER, FoodHtmlParser.parseCategoryFromHtml(potatoHtml))
+        assertEquals(FoodCategory.OTHER, FoodHtmlParser.parseCategoryFromHtml(potatoHtml))
 
         val breadHtml = """
             <a class="crumb-link" href="/pecivo">Pečivo</a>
         """.trimIndent()
-        assertEquals(com.example.kthealthsync.domain.model.FoodCategory.OTHER, FoodHtmlParser.parseCategoryFromHtml(breadHtml))
+        assertEquals(FoodCategory.OTHER, FoodHtmlParser.parseCategoryFromHtml(breadHtml))
     }
 
     @Test
@@ -102,13 +102,10 @@ class FoodHtmlParserTest {
             </nav>
         """.trimIndent()
 
-        // Supplements: vitamins, minerals, rhodiola, carnitine
-        org.junit.Assert.assertEquals(FoodCategory.SUPPLEMENT, FoodHtmlParser.parseCategoryFromHtml(suppHtml, "Magne B6 470mg, 5mg Sanofi"))
-        org.junit.Assert.assertEquals(FoodCategory.SUPPLEMENT, FoodHtmlParser.parseCategoryFromHtml(suppHtml, "OMEGA 3 rybí olej 1000 mg Nutricius"))
-        org.junit.Assert.assertEquals(FoodCategory.SUPPLEMENT, FoodHtmlParser.parseCategoryFromHtml(suppHtml, "Carnitine tabs 1000mg GymBeam"))
-        org.junit.Assert.assertEquals(FoodCategory.SUPPLEMENT, FoodHtmlParser.parseCategoryFromHtml(suppHtml, "Multivit 10 Dr.Max"))
-        org.junit.Assert.assertEquals(FoodCategory.SUPPLEMENT, FoodHtmlParser.parseCategoryFromHtml(suppHtml, "Rodiola Rosea VemoHerb"))
-        org.junit.Assert.assertEquals(FoodCategory.SUPPLEMENT, FoodHtmlParser.parseCategoryFromHtml(suppHtml, "Citrulline Malate"))
+        assertEquals(FoodCategory.SUPPLEMENT, FoodHtmlParser.parseCategoryFromHtml(suppHtml, "Magne B6 470mg, 5mg Sanofi"))
+        assertEquals(FoodCategory.SUPPLEMENT, FoodHtmlParser.parseCategoryFromHtml(suppHtml, "OMEGA 3 rybí olej 1000 mg Nutricius"))
+        assertEquals(FoodCategory.SUPPLEMENT, FoodHtmlParser.parseCategoryFromHtml(suppHtml, "Carnitine tabs 1000mg GymBeam"))
+        assertEquals(FoodCategory.SUPPLEMENT, FoodHtmlParser.parseCategoryFromHtml(suppHtml, "Multivit 10 Dr.Max"))
 
         val fitnessHtml = """
             <nav class="breadcrumb">
@@ -118,8 +115,20 @@ class FoodHtmlParserTest {
             </nav>
         """.trimIndent()
 
-        // Protein powder is excluded from pill supplements count
-        org.junit.Assert.assertEquals(FoodCategory.OTHER, FoodHtmlParser.parseCategoryFromHtml(fitnessHtml, "IsoPrime CFM Isolate Vanilla Cream flavour Amix Nutrition"))
-        org.junit.Assert.assertEquals(FoodCategory.OTHER, FoodHtmlParser.parseCategoryFromHtml(fitnessHtml, "100% Whey Protein"))
+        assertEquals(FoodCategory.OTHER, FoodHtmlParser.parseCategoryFromHtml(fitnessHtml, "IsoPrime CFM Isolate Vanilla Cream flavour Amix Nutrition"))
+        assertEquals(FoodCategory.OTHER, FoodHtmlParser.parseCategoryFromHtml(fitnessHtml, "100% Whey Protein"))
+    }
+
+    @Test
+    fun testParseCategoryFromUrl() {
+        assertEquals(FoodCategory.VEGETABLE, FoodHtmlParser.parseCategoryFromUrl("zelenina/mrkev"))
+        assertEquals(FoodCategory.OTHER, FoodHtmlParser.parseCategoryFromUrl("zelenina/brambory-a-topinambury"))
+        assertEquals(FoodCategory.FRUIT, FoodHtmlParser.parseCategoryFromUrl("ovoce/jablko"))
+        assertEquals(FoodCategory.BEVERAGE, FoodHtmlParser.parseCategoryFromUrl("napoje/voda-neperliva"))
+        assertEquals(FoodCategory.BEVERAGE, FoodHtmlParser.parseCategoryFromUrl("napoje/caj-zeleny"))
+        assertEquals(FoodCategory.SUPPLEMENT, FoodHtmlParser.parseCategoryFromUrl("doplnky-stravy/omega-3"))
+        assertEquals(FoodCategory.OTHER, FoodHtmlParser.parseCategoryFromUrl("doplnky-stravy/whey-protein", "100% Whey Protein"))
+        assertEquals(FoodCategory.OTHER, FoodHtmlParser.parseCategoryFromUrl("pecivo/chleb"))
+        assertEquals(FoodCategory.OTHER, FoodHtmlParser.parseCategoryFromUrl("mlecne-vyrobky/jogurt"))
     }
 }

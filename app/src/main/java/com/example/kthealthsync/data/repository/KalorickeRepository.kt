@@ -19,8 +19,17 @@ import kotlinx.coroutines.flow.first
 
 class KalorickeRepository(
     private val api: KalorickeApiService = RetrofitClient.instance,
-    private val prefs: RepositoryPreferences
+    private val prefs: RepositoryPreferences,
+    private val nanoClient: com.example.kthealthsync.data.nano.NanoDraftClient? = null
 ) {
+    private val activeNanoClient: com.example.kthealthsync.data.nano.NanoDraftClient? by lazy {
+        nanoClient ?: try {
+            com.example.kthealthsync.data.nano.NanoDraftClient()
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
     // Thread-safe caches
     private val recipeDetailsCache = ConcurrentHashMap<String, RecipeData>()
     private val macroCache = ConcurrentHashMap<String, Map<String, Double>>()
@@ -126,8 +135,8 @@ class KalorickeRepository(
         val enrichedTimes = times.map { time ->
             val enrichedFoodstuff = time.foodstuff?.map { f ->
                 val name = f.title ?: f.name ?: f.nazev
-                val guid = f.guid ?: f.guidRecipe ?: mealMap[name]
-                val isMeal = f.guidRecipe != null || (guid != null && (mealMap.containsValue(guid) || mealMap.containsKey(name)))
+                val guid = f.guid ?: f.guidRecipe ?: f.guidUserMeal ?: mealMap[name]
+                val isMeal = f.guidRecipe != null || f.guidUserMeal != null || f.editableMeal == true || (guid != null && (mealMap.containsValue(guid) || mealMap.containsKey(name)))
                 if (isMeal && guid != null) {
                     val recipeData = getRecipeDetail(guid, cookie)
                     if (recipeData != null) {
@@ -194,7 +203,7 @@ class KalorickeRepository(
             carb += NutrientParser.parseNutrient(f.carbohydrate)
             sugar += NutrientParser.parseNutrient(f.sugar)
             salt += NutrientParser.parseNutrient(f.salt)
-            water += HydrationCalculator.parseLiquidVolumeMl(f)
+            water += HydrationCalculator.parseLiquidVolumeMl(f, getFoodCategorySync(f))
             fiber += NutrientParser.parseNutrient(f.fiber)
         }
 
@@ -235,7 +244,7 @@ class KalorickeRepository(
             carbBreakdown = NutrientCalculator.aggregateMacro(allFoodstuffs, { NutrientParser.parseNutrient(it.carbohydrate) }, withMeals),
             sugarBreakdown = NutrientCalculator.aggregateMacro(allFoodstuffs, { NutrientParser.parseNutrient(it.sugar) }, withMeals),
             saltBreakdown = NutrientCalculator.aggregateMacro(allFoodstuffs, { NutrientParser.parseNutrient(it.salt) }, withMeals),
-            waterBreakdown = NutrientCalculator.aggregateMacro(allFoodstuffs, { HydrationCalculator.parseLiquidVolumeMl(it) }, withMeals),
+            waterBreakdown = NutrientCalculator.aggregateMacro(allFoodstuffs, { HydrationCalculator.parseLiquidVolumeMl(it, getFoodCategorySync(it)) }, withMeals),
             fiberBreakdown = NutrientCalculator.aggregateMacro(allFoodstuffs, { NutrientParser.parseNutrient(it.fiber) }, withMeals),
             vegGrams = vegGrams,
             fruitGrams = fruitGrams,
@@ -261,6 +270,11 @@ class KalorickeRepository(
             categoryMemoryCache[key] = cat
             return cat
         }
+        val directCat = FoodHtmlParser.parseCategoryFromUrl(food.url, food.title ?: food.name ?: food.nazev)
+        if (directCat != null) {
+            categoryMemoryCache[key] = directCat
+            return directCat
+        }
         return FoodCategory.OTHER
     }
 
@@ -271,23 +285,57 @@ class KalorickeRepository(
         val persisted = prefs.getFoodCategory(key)
         if (persisted != null) {
             val cat = try { FoodCategory.valueOf(persisted) } catch (_: Exception) { FoodCategory.OTHER }
-            categoryMemoryCache[key] = cat
-            return cat
+            if (cat != FoodCategory.OTHER) {
+                categoryMemoryCache[key] = cat
+                return cat
+            }
         }
 
-        val cat = fetchFoodCategoryFromWeb(food) ?: return FoodCategory.OTHER
+        // 1. Direct URL on food if present
+        val directCat = FoodHtmlParser.parseCategoryFromUrl(food.url, food.title ?: food.name ?: food.nazev)
+        if (directCat != null && directCat != FoodCategory.OTHER) {
+            categoryMemoryCache[key] = directCat
+            prefs.saveFoodCategory(key, directCat.name)
+            return directCat
+        }
+
+        // 2. Fetch category from Kalorické Tabulky (API form URL / HTML breadcrumbs)
+        var cat = fetchFoodCategoryFromWeb(food)
+
+        // 3. Fallback to Gemini Nano if KT gave OTHER or couldn't categorize
+        if (cat == null || cat == FoodCategory.OTHER) {
+            val title = food.title ?: food.name ?: food.nazev
+            if (!title.isNullOrBlank()) {
+                val nanoCat = try {
+                    activeNanoClient?.classifyFood(title)
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    null
+                }
+                if (nanoCat != null && nanoCat != FoodCategory.OTHER) {
+                    cat = nanoCat
+                }
+            }
+        }
+
+        if (cat == null) {
+            return FoodCategory.OTHER
+        }
+
         categoryMemoryCache[key] = cat
-        prefs.saveFoodCategory(key, cat.name)
+        if (cat != FoodCategory.OTHER) {
+            prefs.saveFoodCategory(key, cat.name)
+        }
         return cat
     }
 
     private suspend fun fetchFoodCategoryFromWeb(food: Foodstuff): FoodCategory? {
         val cookie = getCookie()
         val guid = food.guid
-        var itemUrl: String? = null
+        var itemUrl: String? = food.url
         var lookupFailed = false
 
-        if (guid != null) {
+        if (itemUrl.isNullOrBlank() && guid != null) {
             try {
                 val formResp = api.getFoodForm(guid, cookie)
                 itemUrl = formResp.data?.url
@@ -298,21 +346,13 @@ class KalorickeRepository(
             }
         }
 
-        if (itemUrl.isNullOrBlank()) {
-            val title = food.title ?: food.name ?: food.nazev
-            if (!title.isNullOrBlank()) {
-                try {
-                    val searchItems = api.searchFood(query = title, page = 0, cookie = cookie)
-                    itemUrl = searchItems.firstOrNull()?.url
-                } catch (e: Exception) {
-                    if (e is CancellationException) throw e
-                    lookupFailed = true
-                    DebugLogger.addActionLog("Failed search food for category $title: ${e.message}")
-                }
-            }
-        }
+        if (guid != null && lookupFailed) return null
+        if (itemUrl.isNullOrBlank()) return null
 
-        if (itemUrl.isNullOrBlank()) return if (lookupFailed) null else FoodCategory.OTHER
+        val parsedCat = FoodHtmlParser.parseCategoryFromUrl(itemUrl, food.title ?: food.name ?: food.nazev)
+        if (parsedCat != null) {
+            return parsedCat
+        }
 
         return try {
             val fullUrl = if (itemUrl.contains("/")) itemUrl else "potraviny/$itemUrl"
@@ -325,6 +365,7 @@ class KalorickeRepository(
             null
         }
     }
+
 
     suspend fun getFrequentFoodstuff(page: Int = 0, limit: Int = 10): List<AutocompleteResponseItem> {
         val cookie = getCookie()
@@ -441,9 +482,19 @@ class KalorickeRepository(
     }
 
     suspend fun getFoodForm(guid: String): FoodFormResponse {
-        return executeWithRetry(operationName = "getFoodForm") { cookieParam ->
+        val resp = executeWithRetry(operationName = "getFoodForm") { cookieParam ->
             api.getFoodForm(guid, cookieParam)
         }
+        val url = resp.data?.url
+        val title = resp.data?.title
+        val cat = FoodHtmlParser.parseCategoryFromUrl(url, title)
+        if (cat != null && cat != FoodCategory.OTHER) {
+            categoryMemoryCache[guid] = cat
+            if (!title.isNullOrBlank()) categoryMemoryCache[title] = cat
+            prefs.saveFoodCategory(guid, cat.name)
+            if (!title.isNullOrBlank()) prefs.saveFoodCategory(title, cat.name)
+        }
+        return resp
     }
 
     suspend fun getFoodMacrosFromWeb(itemUrl: String, formUrl: String?): Map<String, Double> {

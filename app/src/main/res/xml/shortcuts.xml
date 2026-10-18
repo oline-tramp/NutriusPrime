@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="add_food"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_add"
+        android:shortcutShortLabel="@string/shortcut_add_food"
+        android:shortcutLongLabel="@string/shortcut_add_food_long">
+        <intent
+            android:action="com.example.kthealthsync.action.ADD_FOOD"
+            android:targetPackage="com.example.kthealthsync"
+            android:targetClass="com.example.kthealthsync.MainActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="scan_barcode"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_barcode"
+        android:shortcutShortLabel="@string/shortcut_scan_barcode"
+        android:shortcutLongLabel="@string/shortcut_scan_barcode_long">
+        <intent
+            android:action="com.example.kthealthsync.action.SCAN_BARCODE"
+            android:targetPackage="com.example.kthealthsync"
+            android:targetClass="com.example.kthealthsync.MainActivity" />
+    </shortcut>
+</shortcuts>

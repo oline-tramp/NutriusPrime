@@ -217,5 +217,42 @@ class HydrationCalculatorTest {
             guid = "c3", guidRecipe = null, isRecipe = false, unit = "100 g"
         )
         assertEquals(0.0, HydrationCalculator.parseLiquidVolumeMl(pickledCucumber), 0.01)
+
+        // Meat & Steaks: hovězí zadní steak z válečku must NOT be parsed as "tea" beverage (0.0 ml)
+        val hoveziSteak = Foodstuff(
+            title = "hovězí zadní steak z válečku",
+            name = null, nazev = null, energy = "110", protein = "22", carbohydrate = null,
+            fat = "2.3", sugar = null, salt = "0.25", water = null, fiber = null,
+            foodstuff = null, items = null, ingredients = null, components = null,
+            guid = "hs1", guidRecipe = null, isRecipe = false, unit = "200 g"
+        )
+        assertEquals(0.0, HydrationCalculator.parseLiquidVolumeMl(hoveziSteak), 0.01)
+
+        // Real tea beverage: must still be parsed correctly
+        val blackTea = Foodstuff(
+            title = "Černý čaj s citrónem",
+            name = null, nazev = null, energy = "5", protein = "0", carbohydrate = "1",
+            fat = "0", sugar = "1", salt = "0", water = null, fiber = "0",
+            foodstuff = null, items = null, ingredients = null, components = null,
+            guid = "tea1", guidRecipe = null, isRecipe = false, unit = "250 ml"
+        )
+        assertEquals(250.0, HydrationCalculator.parseLiquidVolumeMl(blackTea), 0.01)
+
+        val greenTea = Foodstuff(
+            title = "Green tea",
+            name = null, nazev = null, energy = null, protein = null, carbohydrate = null,
+            fat = null, sugar = null, salt = null, water = null, fiber = null,
+            foodstuff = null, items = null, ingredients = null, components = null,
+            guid = "tea2", guidRecipe = null, isRecipe = false, unit = "300 ml"
+        )
+        assertEquals(300.0, HydrationCalculator.parseLiquidVolumeMl(greenTea), 0.01)
+
+        // Food with FoodCategory.BEVERAGE logged in grams
+        val customDrink = Foodstuff(
+            title = "Custom energy mix powder",
+            unit = "250 g"
+        )
+        assertEquals(250.0, HydrationCalculator.parseLiquidVolumeMl(customDrink, com.example.kthealthsync.domain.model.FoodCategory.BEVERAGE), 0.01)
+        assertEquals(0.0, HydrationCalculator.parseLiquidVolumeMl(customDrink, com.example.kthealthsync.domain.model.FoodCategory.OTHER), 0.01)
     }
 }

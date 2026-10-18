@@ -177,14 +177,6 @@ class RecentFoodHistoryProvider(private val repository: KalorickeRepository) {
     // In-memory cache for past days: YYYY-MM-DD -> DiaryResponse
     private val diaryCache = ConcurrentHashMap<String, DiaryResponse>()
 
-    // Explicit repeat requests use a fresh, single-day read, never the aggregate's latest portion.
-    suspend fun getMealForRepeat(request: MealRepeatRequest, today: LocalDate = LocalDate.now()): List<FoodDraftItem> {
-        val date = today.minusDays(request.daysAgo.toLong()).format(DateTimeFormatter.ISO_LOCAL_DATE)
-        val diary = repository.getDiaryWithAutoLogin(date)
-        val meals = diary.data?.times ?: throw DraftInputException("Не удалось прочитать дневник за $date. Попробуйте ещё раз.")
-        return MealRepeatResolver.resolve(request, RecentFoodHistoryHelper.extractMeals(mapOf(request.daysAgo to meals)))
-    }
-
     suspend fun getRecentHistory(
         today: LocalDate = LocalDate.now(),
         daysBack: Int = RecentFoodHistoryHelper.DAYS_COUNT

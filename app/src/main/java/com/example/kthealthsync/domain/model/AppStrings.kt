@@ -118,6 +118,8 @@ data class AppStrings(
     val healthConnectLabel: String,
     val goalsUpdatedSuccess: String,
     val goalsUpdatedError: String,
+    val dailyNotificationLabel: String,
+    val dailyNotificationSub: String,
 
     // Share & Validation
     val shareDayTitle: String,
@@ -236,6 +238,8 @@ val RuStrings = AppStrings(
     healthConnectLabel = "Health Connect",
     goalsUpdatedSuccess = "Цели обновлены из профиля КТ!",
     goalsUpdatedError = "Не удалось обновить цели из КТ",
+    dailyNotificationLabel = "Уведомление с прогрессом",
+    dailyNotificationSub = "Закреплённый прогресс калорий и БЖУ в шторке с быстрыми действиями",
 
     shareDayTitle = "Поделиться данными дня",
     invalidAmountError = "Введите корректное количество",
@@ -352,6 +356,8 @@ val CsStrings = AppStrings(
     healthConnectLabel = "Health Connect",
     goalsUpdatedSuccess = "Cíle aktualizovány z profilu KT!",
     goalsUpdatedError = "Nepodařilo se aktualizovat cíle z KT",
+    dailyNotificationLabel = "Oznámení s průběhem",
+    dailyNotificationSub = "Připnutý přehled kalorií a živin v liště s rychlými akcemi",
 
     shareDayTitle = "Sdílet data dne",
     invalidAmountError = "Zadejte platné množství",
@@ -468,6 +474,8 @@ val EnStrings = AppStrings(
     healthConnectLabel = "Health Connect",
     goalsUpdatedSuccess = "Goals updated from KT profile!",
     goalsUpdatedError = "Failed to update goals from KT",
+    dailyNotificationLabel = "Daily progress notification",
+    dailyNotificationSub = "Pinned calories & macros summary in notification shade with quick actions",
 
     shareDayTitle = "Share daily data",
     invalidAmountError = "Enter a valid amount",

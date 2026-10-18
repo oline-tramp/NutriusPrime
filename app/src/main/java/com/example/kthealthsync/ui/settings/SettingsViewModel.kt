@@ -51,6 +51,21 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         initialValue = false
     )
 
+    val dailyNotificationEnabled: StateFlow<Boolean> = prefs.dailyNotificationEnabledFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = true
+    )
+
+    fun toggleDailyNotification(enabled: Boolean) {
+        viewModelScope.launch {
+            prefs.setDailyNotificationEnabled(enabled)
+            if (!enabled) {
+                com.example.kthealthsync.domain.util.DailyNotificationHelper.cancelNotification(getApplication())
+            }
+        }
+    }
+
     val nutrientGoals: StateFlow<NutrientGoals> = prefs.nutrientGoalsFlow.stateIn(
         scope = viewModelScope,
         started = SharingStarted.Eagerly,

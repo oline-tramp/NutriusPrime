@@ -1,9 +1,20 @@
 package com.example.kthealthsync.domain.util
 
 import com.example.kthealthsync.Foodstuff
+import com.example.kthealthsync.domain.model.FoodCategory
 import com.example.kthealthsync.domain.util.NutrientParser.parseNutrient
+import com.example.kthealthsync.domain.util.NutrientParser.parsePortionGrams
 
 object HydrationCalculator {
+
+    private val DIGIT_SPACE_DIGIT_REGEX = "(\\d)\\s+(\\d)".toRegex()
+    private val SIMPLE_COUNT_REGEX = "^([\\d.]+)\\s*(?:ks|kus|piece|шт)?$".toRegex()
+    private val PAREN_UNIT_REGEX = "\\(([\\d.]+)\\s*([a-zA-Z]+)\\)".toRegex()
+    private val COUNT_X_REGEX = "([\\d.]+)\\s*x".toRegex()
+    private val MULT_LIQUID_REGEX = "([\\d.]+)\\s*x\\s*([\\d.]+)?\\s*(ml|l|dl|cl|g|kg)\\b".toRegex(RegexOption.IGNORE_CASE)
+    private val SIMPLE_LIQUID_REGEX = "([\\d.]+)\\s*(ml|l|dl|cl|g|kg)\\b".toRegex(RegexOption.IGNORE_CASE)
+    private val MULT_DIGITS_REGEX = "([\\d.]+)\\s*x\\s*([\\d.]+)".toRegex()
+    private val NUM_REGEX = "([\\d.]+)".toRegex()
 
     /**
      * Parses the liquid volume in milliliters (ml) for beverages and hydration.
@@ -11,17 +22,17 @@ object HydrationCalculator {
      * "1 111 x 1 ml", "1 x 1.5 l", "balení (1 000 ml)", etc.
      * Excludes cooking oils and solid food moisture to conform to clinical Fluid Intake (Hydration) standards.
      */
-    fun parseLiquidVolumeMl(food: Foodstuff): Double {
+    fun parseLiquidVolumeMl(food: Foodstuff, category: FoodCategory? = null): Double {
         val components = food.foodstuff ?: food.items ?: food.ingredients ?: food.components
         if (!components.isNullOrEmpty()) {
-            val compVol = components.sumOf { parseLiquidVolumeMl(it) }
+            val compVol = components.sumOf { parseLiquidVolumeMl(it, category) }
             if (compVol > 0) return compVol
         }
         val fname = food.title ?: food.name ?: food.nazev
-        return parseLiquidVolumeMl(fname, food.unit, food.water)
+        return parseLiquidVolumeMl(fname, food.unit, food.water, category)
     }
 
-    fun parseLiquidVolumeMl(title: String?, unitStr: String?, waterStr: String?): Double {
+    fun parseLiquidVolumeMl(title: String?, unitStr: String?, waterStr: String?, category: FoodCategory? = null): Double {
         val titleLower = (title ?: "").lowercase()
 
         // Exclude cooking oils, butter, lard, sauces, dressings which may be measured in ml but are not beverages
@@ -49,38 +60,8 @@ object HydrationCalculator {
             if (waterVal > 0) return waterVal
 
             // Fallback if waterStr was null/not populated: 1g watermelon ≈ 0.915 ml water
-            val normalizedG = (unitStr ?: "").replace("\u00a0", " ").replace(",", ".").trim()
-            val multG = "([\\d.]+)\\s*x\\s*([\\d.]+)?\\s*g".toRegex().find(normalizedG)
-            if (multG != null) {
-                val count = multG.groupValues[1].toDoubleOrNull() ?: 1.0
-                val amount = multG.groupValues[2].takeIf { it.isNotBlank() }?.toDoubleOrNull() ?: 1.0
-                val g = count * amount
-                if (g > 0) return g * 0.915
-            }
-            val simpleG = "([\\d.]+)\\s*g".toRegex().find(normalizedG)
-            if (simpleG != null) {
-                val amount = simpleG.groupValues[1].toDoubleOrNull() ?: 0.0
-                if (amount > 0) return amount * 0.915
-            }
-            val multKg = "([\\d.]+)\\s*x\\s*([\\d.]+)?\\s*kg".toRegex().find(normalizedG)
-            if (multKg != null) {
-                val count = multKg.groupValues[1].toDoubleOrNull() ?: 1.0
-                val amount = multKg.groupValues[2].takeIf { it.isNotBlank() }?.toDoubleOrNull() ?: 1.0
-                val g = count * amount * 1000.0
-                if (g > 0) return g * 0.915
-            }
-            val simpleKg = "([\\d.]+)\\s*kg".toRegex().find(normalizedG)
-            if (simpleKg != null) {
-                val amount = simpleKg.groupValues[1].toDoubleOrNull() ?: 0.0
-                if (amount > 0) return amount * 1000.0 * 0.915
-            }
-            val parenG = "\\(([\\d.]+)\\s*g\\)".toRegex().find(normalizedG)
-            if (parenG != null) {
-                val count = "([\\d.]+)\\s*x".toRegex().find(normalizedG)?.groupValues?.get(1)?.toDoubleOrNull() ?: 1.0
-                val amount = parenG.groupValues[1].toDoubleOrNull() ?: 0.0
-                val g = count * amount
-                if (g > 0) return g * 0.915
-            }
+            val g = parsePortionGrams(unitStr)
+            if (g > 0) return g * 0.915
         }
 
         // Cucumbers: water content represents fluid hydration (~95.2% water)
@@ -89,40 +70,11 @@ object HydrationCalculator {
             if (waterVal > 0) return waterVal
 
             // Fallback if waterStr was null/not populated: 1g cucumber ≈ 0.952 ml water
+            val g = parsePortionGrams(unitStr)
+            if (g > 0) return g * 0.952
+
             val normalizedG = (unitStr ?: "").replace("\u00a0", " ").replace(",", ".").trim()
-            val multG = "([\\d.]+)\\s*x\\s*([\\d.]+)?\\s*g".toRegex().find(normalizedG)
-            if (multG != null) {
-                val count = multG.groupValues[1].toDoubleOrNull() ?: 1.0
-                val amount = multG.groupValues[2].takeIf { it.isNotBlank() }?.toDoubleOrNull() ?: 1.0
-                val g = count * amount
-                if (g > 0) return g * 0.952
-            }
-            val simpleG = "([\\d.]+)\\s*g".toRegex().find(normalizedG)
-            if (simpleG != null) {
-                val amount = simpleG.groupValues[1].toDoubleOrNull() ?: 0.0
-                if (amount > 0) return amount * 0.952
-            }
-            val multKg = "([\\d.]+)\\s*x\\s*([\\d.]+)?\\s*kg".toRegex().find(normalizedG)
-            if (multKg != null) {
-                val count = multKg.groupValues[1].toDoubleOrNull() ?: 1.0
-                val amount = multKg.groupValues[2].takeIf { it.isNotBlank() }?.toDoubleOrNull() ?: 1.0
-                val g = count * amount * 1000.0
-                if (g > 0) return g * 0.952
-            }
-            val simpleKg = "([\\d.]+)\\s*kg".toRegex().find(normalizedG)
-            if (simpleKg != null) {
-                val amount = simpleKg.groupValues[1].toDoubleOrNull() ?: 0.0
-                if (amount > 0) return amount * 1000.0 * 0.952
-            }
-            val parenG = "\\(([\\d.]+)\\s*g\\)".toRegex().find(normalizedG)
-            if (parenG != null) {
-                val count = "([\\d.]+)\\s*x".toRegex().find(normalizedG)?.groupValues?.get(1)?.toDoubleOrNull() ?: 1.0
-                val amount = parenG.groupValues[1].toDoubleOrNull() ?: 0.0
-                val g = count * amount
-                if (g > 0) return g * 0.952
-            }
-            val simpleCountRegex = "^([\\d.]+)\\s*(?:ks|kus|piece|шт)?$".toRegex()
-            val simpleCount = simpleCountRegex.find(normalizedG)?.groupValues?.get(1)?.toDoubleOrNull()
+            val simpleCount = SIMPLE_COUNT_REGEX.find(normalizedG)?.groupValues?.get(1)?.toDoubleOrNull()
             if (simpleCount != null && simpleCount > 0) {
                 return simpleCount * 250.0 * 0.952
             }
@@ -130,23 +82,12 @@ object HydrationCalculator {
 
         // Drinkable fermented dairy (e.g. Kefir) logged in grams: 1g ≈ 1ml
         if (isDrinkableFermentedDairy(titleLower)) {
-            val normalizedG = (unitStr ?: "").replace("\u00a0", " ").replace(",", ".").trim()
-            val multG = "([\\d.]+)\\s*x\\s*([\\d.]+)?\\s*g".toRegex().find(normalizedG)
-            if (multG != null) {
-                val count = multG.groupValues[1].toDoubleOrNull() ?: 1.0
-                val amount = multG.groupValues[2].takeIf { it.isNotBlank() }?.toDoubleOrNull() ?: 1.0
-                val ml = count * amount
-                if (ml > 0) return ml
-            }
-            val simpleG = "([\\d.]+)\\s*g".toRegex().find(normalizedG)
-            if (simpleG != null) {
-                val amount = simpleG.groupValues[1].toDoubleOrNull() ?: 0.0
-                if (amount > 0) return amount
-            }
+            val ml = parsePortionGrams(unitStr)
+            if (ml > 0) return ml
         }
 
         val isPureWater = isPureWaterOrMineral(titleLower)
-        val isDrink = isPureWater || isBeverageOrDrink(titleLower)
+        val isDrink = category == FoodCategory.BEVERAGE || isPureWater || isBeverageOrDrink(titleLower)
 
         if (unitStr.isNullOrBlank()) {
             if (isPureWater) {
@@ -156,14 +97,12 @@ object HydrationCalculator {
         }
 
         val normalized = unitStr.replace("\u00a0", " ").replace(",", ".").trim()
-        val cleaned = normalized.replace("(\\d)\\s+(\\d)".toRegex(), "$1$2")
+        val cleaned = normalized.replace(DIGIT_SPACE_DIGIT_REGEX, "$1$2")
 
         // 1. Container pattern: "balení (1000 ml)", "sklenice (250 ml)", "2 x balení (500 ml)", "1 x láhev (1500 g)"
-        val parenRegex = "\\(([\\d.]+)\\s*([a-zA-Z]+)\\)".toRegex()
-        val parenMatch = parenRegex.find(cleaned)
+        val parenMatch = PAREN_UNIT_REGEX.find(cleaned)
         if (parenMatch != null) {
-            val countRegex = "([\\d.]+)\\s*x".toRegex()
-            val count = countRegex.find(cleaned)?.groupValues?.get(1)?.toDoubleOrNull() ?: 1.0
+            val count = COUNT_X_REGEX.find(cleaned)?.groupValues?.get(1)?.toDoubleOrNull() ?: 1.0
             val amount = parenMatch.groupValues[1].toDoubleOrNull() ?: 0.0
             val unit = parenMatch.groupValues[2].lowercase()
             val ml = convertToMl(count * amount, unit, isDrink)
@@ -171,8 +110,7 @@ object HydrationCalculator {
         }
 
         // 2. Multiplier pattern: "200 x 1 ml", "3 x 100 ml", "1 x 0.5 l", "1 x 2 dl", "1 x 25 cl", "900 x 1 g"
-        val multRegex = "([\\d.]+)\\s*x\\s*([\\d.]+)?\\s*(ml|l|dl|cl|g|kg)\\b".toRegex(RegexOption.IGNORE_CASE)
-        val multMatch = multRegex.find(cleaned)
+        val multMatch = MULT_LIQUID_REGEX.find(cleaned)
         if (multMatch != null) {
             val count = multMatch.groupValues[1].toDoubleOrNull() ?: 1.0
             val amount = multMatch.groupValues[2].takeIf { it.isNotBlank() }?.toDoubleOrNull() ?: 1.0
@@ -182,8 +120,7 @@ object HydrationCalculator {
         }
 
         // 3. Simple pattern: "500 ml", "0.5 l", "2 dl", "25 cl", "900 g"
-        val simpleRegex = "([\\d.]+)\\s*(ml|l|dl|cl|g|kg)\\b".toRegex(RegexOption.IGNORE_CASE)
-        val simpleMatch = simpleRegex.find(cleaned)
+        val simpleMatch = SIMPLE_LIQUID_REGEX.find(cleaned)
         if (simpleMatch != null) {
             val amount = simpleMatch.groupValues[1].toDoubleOrNull() ?: 0.0
             val unit = simpleMatch.groupValues[2].lowercase()
@@ -197,15 +134,14 @@ object HydrationCalculator {
             if (waterVal > 0) return waterVal
 
             // Extract numeric digits from unitStr (e.g. "900", "1500", "900 x 1")
-            val multG = "([\\d.]+)\\s*x\\s*([\\d.]+)".toRegex().find(cleaned)
+            val multG = MULT_DIGITS_REGEX.find(cleaned)
             if (multG != null) {
                 val count = multG.groupValues[1].toDoubleOrNull() ?: 1.0
                 val amount = multG.groupValues[2].toDoubleOrNull() ?: 1.0
                 val g = count * amount
                 if (g > 0) return g
             }
-            val numRegex = "([\\d.]+)".toRegex()
-            val match = numRegex.find(cleaned)
+            val match = NUM_REGEX.find(cleaned)
             if (match != null) {
                 val amount = match.groupValues[1].toDoubleOrNull() ?: 0.0
                 if (amount > 0) return amount
@@ -233,24 +169,38 @@ object HydrationCalculator {
                 titleLower.contains("mineral") || titleLower.contains("минерал")
     }
 
+    private val DRINK_WORD_REGEX = Regex(
+        """(?:\b|^|[\s,\-_()/'"”’])(?:tea|teas|iced\s*tea|čaj\w*|caj\w*|чай\w*|káva\w*|kava\w*|coffee|кофе\w*|espresso|cappuccino|latte|latté|džus\w*|dzus\w*|juice\w*|сок[а-я]*|mošt\w*|limonád\w*|limonad\w*|lemonade\w*|лимонад\w*|nápoj\w*|napoj\w*|напиток\w*|drink\w*|cola|coca-cola|pepsi|sprite|fanta|kombucha|birell|smoothie|kompot\w*|компот\w*|odvar\w*|infusion)(?:\b|$|[\s,\-_()/'"”’])""",
+        RegexOption.IGNORE_CASE
+    )
+
+    private fun isSolidFood(titleLower: String): Boolean {
+        return titleLower.contains("steak") || titleLower.contains("řízek") ||
+                titleLower.contains("rizek") || titleLower.contains("kotlet") ||
+                titleLower.contains("guláš") || titleLower.contains("gulas") ||
+                titleLower.contains("hověz") || titleLower.contains("hovez") ||
+                titleLower.contains("vepřov") || titleLower.contains("veprov") ||
+                titleLower.contains("kuřec") || titleLower.contains("kurec") ||
+                titleLower.contains("krůt") || titleLower.contains("krut") ||
+                titleLower.contains("šunk") || titleLower.contains("sunk") ||
+                titleLower.contains("klobás") || titleLower.contains("klobas") ||
+                titleLower.contains("párek") || titleLower.contains("parek") ||
+                titleLower.contains("salám") || titleLower.contains("salam") ||
+                titleLower.contains("filet") || titleLower.contains("file") ||
+                titleLower.contains("losos") || titleLower.contains("tuňák") ||
+                titleLower.contains("tunak") || titleLower.contains("maso") ||
+                titleLower.contains("meat") || titleLower.contains("стейк") ||
+                titleLower.contains("котлет") || titleLower.contains("фарш") ||
+                titleLower.contains("мясо") || titleLower.contains("говядин") ||
+                titleLower.contains("свинин") || titleLower.contains("куриц") ||
+                titleLower.contains("курин") || titleLower.contains("индейк") ||
+                titleLower.contains("рыб") || titleLower.contains("колбас") ||
+                titleLower.contains("сосиск") || titleLower.contains("ветчин")
+    }
+
     private fun isBeverageOrDrink(titleLower: String): Boolean {
-        return titleLower.contains("čaj") || titleLower.contains("caj") ||
-                titleLower.contains("tea") || titleLower.contains("чай") ||
-                titleLower.contains("káva") || titleLower.contains("kava") ||
-                titleLower.contains("coffee") || titleLower.contains("кофе") ||
-                titleLower.contains("espresso") || titleLower.contains("cappuccino") ||
-                titleLower.contains("džus") || titleLower.contains("dzus") ||
-                titleLower.contains("juice") || titleLower.contains("сок") ||
-                titleLower.contains("mošt") || titleLower.contains("most") ||
-                titleLower.contains("limonád") || titleLower.contains("limonad") ||
-                titleLower.contains("lemonade") || titleLower.contains("лимонад") ||
-                titleLower.contains("sirupový nápoj") || titleLower.contains("nápoj") ||
-                titleLower.contains("napoj") || titleLower.contains("drink") ||
-                titleLower.contains("cola") || titleLower.contains("pepsi") ||
-                titleLower.contains("sprite") || titleLower.contains("fanta") ||
-                titleLower.contains("kombucha") || titleLower.contains("birell") ||
-                titleLower.contains("smoothie") || titleLower.contains("kompot") ||
-                titleLower.contains("odvar") || titleLower.contains("infusion")
+        if (isSolidFood(titleLower)) return false
+        return DRINK_WORD_REGEX.containsMatchIn(titleLower)
     }
 
     private fun isCucumber(titleLower: String): Boolean {

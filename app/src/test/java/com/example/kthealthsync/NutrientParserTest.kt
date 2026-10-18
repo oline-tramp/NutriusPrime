@@ -43,5 +43,9 @@ class NutrientParserTest {
         org.junit.Assert.assertEquals(2.0, NutrientParser.parseSupplementCount("2 kapsle"), 0.001)
         org.junit.Assert.assertEquals(1.0, NutrientParser.parseSupplementCount(null), 0.001)
         org.junit.Assert.assertEquals(1.0, NutrientParser.parseSupplementCount(""), 0.001)
+        org.junit.Assert.assertEquals(1.0, NutrientParser.parseSupplementCount("1000 mg"), 0.001)
+        org.junit.Assert.assertEquals(2.0, NutrientParser.parseSupplementCount("2 x 1000 mg"), 0.001)
+        org.junit.Assert.assertEquals(1.0, NutrientParser.parseSupplementCount("1000 x 1 mg"), 0.001)
+        org.junit.Assert.assertEquals(1.0, NutrientParser.parseSupplementCount("500 mg"), 0.001)
     }
 }

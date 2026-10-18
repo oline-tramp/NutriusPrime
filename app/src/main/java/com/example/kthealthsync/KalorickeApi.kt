@@ -51,6 +51,8 @@ data class Foodstuff(
     val components: List<Foodstuff>? = null,
     val guid: String? = null,
     val guidRecipe: String? = null,
+    val guidUserMeal: String? = null,
+    val editableMeal: Boolean? = null,
     val isRecipe: Boolean? = null,
     val unit: String? = null,
     val id: String? = null,

@@ -8,6 +8,8 @@ import java.util.Locale
 
 object WhoopPromptFormatter {
 
+    private val CZ_DATE_REGEX = "\\d{2}\\.\\d{2}\\.\\d{4}".toRegex()
+
     /**
      * Formats daily nutrition and lifestyle data into an unambiguous, tool-executable prompt
      * optimized for the Whoop AI Coach to log Whoop Journal behaviors.
@@ -18,7 +20,7 @@ object WhoopPromptFormatter {
         diaryResponse: DiaryResponse?
     ): String {
         val isoDate = try {
-            if (dateStr.matches("\\d{2}\\.\\d{2}\\.\\d{4}".toRegex())) {
+            if (dateStr.matches(CZ_DATE_REGEX)) {
                 val parts = dateStr.split(".")
                 "${parts[2]}-${parts[1]}-${parts[0]}"
             } else dateStr
@@ -29,25 +31,7 @@ object WhoopPromptFormatter {
             !it.title.isNullOrBlank() || !it.name.isNullOrBlank() || !it.nazev.isNullOrBlank()
         }
 
-        fun extractWeightGrams(f: Foodstuff): Double {
-            val unitStr = (f.unit ?: "").replace("\u00a0", " ").replace(",", ".").trim()
-            val multMatch = "([\\d.]+)\\s*x\\s*([\\d.]+)?\\s*g\\b".toRegex(RegexOption.IGNORE_CASE).find(unitStr)
-            if (multMatch != null) {
-                val c = multMatch.groupValues[1].toDoubleOrNull() ?: 1.0
-                val a = multMatch.groupValues[2].takeIf { it.isNotBlank() }?.toDoubleOrNull() ?: 1.0
-                return c * a
-            }
-            val simpleMatch = "([\\d.]+)\\s*g\\b".toRegex(RegexOption.IGNORE_CASE).find(unitStr)
-            if (simpleMatch != null) {
-                return simpleMatch.groupValues[1].toDoubleOrNull() ?: 0.0
-            }
-            val parenMatch = "\\(([\\d.]+)\\s*g\\)".toRegex(RegexOption.IGNORE_CASE).find(unitStr)
-            if (parenMatch != null) {
-                val c = "([\\d.]+)\\s*x".toRegex().find(unitStr)?.groupValues?.get(1)?.toDoubleOrNull() ?: 1.0
-                return c * (parenMatch.groupValues[1].toDoubleOrNull() ?: 0.0)
-            }
-            return 0.0
-        }
+        fun extractWeightGrams(f: Foodstuff): Double = NutrientParser.parsePortionGrams(f.unit)
 
         // 1. Breakfast
         val breakfastMeal = mealTimes.firstOrNull { meal ->
@@ -202,7 +186,7 @@ object WhoopPromptFormatter {
         }
 
         val magFood = findSupp("magnes", "magnéz", "magnez", "hořčík", "horcik", "magne b6", "magnesium")
-        val creatFood = findSupp("creatine", "kreatin", "isoprime")
+        val creatFood = findSupp("creatine", "kreatin")
         val omegaFood = findSupp("omega", "rybí tuk", "rybi tuk", "fish oil", "epa", "dha")
         val vitDFood = findSupp("vitamin d", "vitamín d", "vit d", "d3", "cholecalciferol")
         val multiFood = findSupp("multivit", "multi-vit")
@@ -238,10 +222,12 @@ object WhoopPromptFormatter {
         sb.appendLine("Date: $isoDate")
         sb.appendLine()
         sb.appendLine("MANDATORY INSTRUCTIONS FOR WHOOP AI COACH:")
-        sb.appendLine("1. Log ALL supported behaviors below for the date $isoDate immediately into my Whoop Journal using your internal logging tools.")
-        sb.appendLine("2. DO NOT ask for confirmation. DO NOT ask \"Do you want me to log X?\". Proceed immediately with tool calls.")
-        sb.appendLine("3. POSITIVE BEHAVIORS (marked YES): Log each as YES with the exact value, count, dose, or time specified.")
-        sb.appendLine("4. NEGATIVE BEHAVIORS (marked NO): For EVERY behavior marked NO below, log it explicitly into the journal as \"NO\" (did not consume / did not occur). If a supplement, habit, or food category is marked NO below, it means I definitely did NOT have it on this day.")
+        sb.appendLine("1. RETRIEVE & STATE TRACKED BEHAVIORS FIRST: Before logging or updating any entries, retrieve my current Whoop Journal configuration/entry for $isoDate. In your initial response, explicitly list all behaviors that I actively track.")
+        sb.appendLine("2. LOG ONLY MY ACTIVELY TRACKED BEHAVIORS: Cross-reference ONLY the behaviors I actively track against the reference data below:")
+        sb.appendLine("   - POSITIVE BEHAVIORS (marked YES): If I track this behavior, log it as YES with the exact value, count, dose, or time specified.")
+        sb.appendLine("   - NEGATIVE BEHAVIORS (marked NO): For tracked behaviors marked NO below (or where intake is 0 / absent), log them as \"NO\" (did not consume / did not occur). If marked NO below, it means I definitely did NOT have it on this day.")
+        sb.appendLine("3. STRICTLY DO NOT ADD UNTRACKED BEHAVIORS: Under NO circumstances should you add, activate, or enable new behaviors to my Whoop Journal that I do not already track. If an item in the reference data below is NOT currently tracked by me, IGNORE IT COMPLETELY.")
+        sb.appendLine("4. NO CONFIRMATION NEEDED: DO NOT ask for confirmation. DO NOT ask \"Do you want me to log X?\". Proceed immediately with tool calls.")
         sb.appendLine()
         sb.appendLine("============================================================")
         sb.appendLine("1. NUTRITION & HYDRATION (WHOOP JOURNAL)")

@@ -1,6 +1,7 @@
 package com.example.kthealthsync.ui.dashboard
 
 import android.app.DatePickerDialog
+import android.content.DialogInterface
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -98,6 +99,9 @@ fun CloneEntriesDialog(
                             targetDate.monthValue - 1,
                             targetDate.dayOfMonth
                         )
+                        dialog.setButton(DialogInterface.BUTTON_NEUTRAL, strings.dateToday) { _, _ ->
+                            targetDate = LocalDate.now()
+                        }
                         dialog.show()
                     },
                     contentPadding = PaddingValues(0.dp)

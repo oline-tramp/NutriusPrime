@@ -43,9 +43,21 @@ fun SettingsScreen(
     val syncHour by viewModel.syncHour.collectAsState()
     val syncMinute by viewModel.syncMinute.collectAsState()
     val autoSyncEnabled by viewModel.autoSyncEnabled.collectAsState()
+    val dailyNotificationEnabled by viewModel.dailyNotificationEnabled.collectAsState()
     val nutrientGoals by viewModel.nutrientGoals.collectAsState()
     val isSyncingGoals by viewModel.isSyncingGoals.collectAsState()
     val currentAppLanguage by viewModel.appLanguage.collectAsState()
+
+    val notifPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            viewModel.toggleDailyNotification(true)
+        } else {
+            viewModel.toggleDailyNotification(false)
+            android.widget.Toast.makeText(context, "Notification permission denied", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
 
     var showGoalsDialog by remember { mutableStateOf(false) }
     var showLanguageDialog by remember { mutableStateOf(false) }
@@ -70,7 +82,12 @@ fun SettingsScreen(
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color(0xFF121212),
+                    titleContentColor = Color.White,
+                    navigationIconContentColor = Color.White
+                )
             )
         }
     ) { padding ->
@@ -127,6 +144,53 @@ fun SettingsScreen(
                     onClick = { timePickerDialog.show() }
                 )
             }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = Color(0xFF2A2A2A))
+
+            SettingSectionHeader(strings.dailyNotificationLabel)
+            SettingItem(
+                icon = Icons.Default.Info,
+                title = strings.dailyNotificationLabel,
+                subtitle = strings.dailyNotificationSub,
+                onClick = {
+                    val target = !dailyNotificationEnabled
+                    if (target) {
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
+                            androidx.core.content.ContextCompat.checkSelfPermission(
+                                context,
+                                android.Manifest.permission.POST_NOTIFICATIONS
+                            ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+                        ) {
+                            notifPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                        } else {
+                            viewModel.toggleDailyNotification(true)
+                        }
+                    } else {
+                        viewModel.toggleDailyNotification(false)
+                    }
+                },
+                trailingContent = {
+                    Switch(
+                        checked = dailyNotificationEnabled,
+                        onCheckedChange = { target ->
+                            if (target) {
+                                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
+                                    androidx.core.content.ContextCompat.checkSelfPermission(
+                                        context,
+                                        android.Manifest.permission.POST_NOTIFICATIONS
+                                    ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+                                ) {
+                                    notifPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                                } else {
+                                    viewModel.toggleDailyNotification(true)
+                                }
+                            } else {
+                                viewModel.toggleDailyNotification(false)
+                            }
+                        }
+                    )
+                }
+            )
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = Color(0xFF2A2A2A))
 

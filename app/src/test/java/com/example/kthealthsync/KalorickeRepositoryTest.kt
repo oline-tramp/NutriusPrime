@@ -167,6 +167,42 @@ class KalorickeRepositoryTest {
         assertEquals("VEGETABLE", prefs.categories["food"])
     }
 
+    @Test fun foodUrlAndFoodFormImmediatelyTagCategories() = runTest {
+        val repo = repository { method, _ ->
+            when (method) {
+                "getFoodForm" -> FoodFormResponse(0, null,
+                    FoodFormData("g1", "Jablko Golden", "ovoce/jablko-golden", null, null, null))
+                else -> error(method)
+            }
+        }
+        // 1. Food with explicit URL resolves immediately without calling web
+        val drink = Foodstuff(guid = "d1", title = "Mineral water", url = "napoje/mineralka")
+        assertEquals(FoodCategory.BEVERAGE, repo.getFoodCategory(drink))
+        assertEquals("BEVERAGE", prefs.categories["d1"])
+
+        // 2. Loading a food form tags both guid and title into cache and preferences
+        repo.getFoodForm("g1")
+        assertEquals("FRUIT", prefs.categories["g1"])
+        assertEquals("FRUIT", prefs.categories["Jablko Golden"])
+    }
+
+    @Test fun nanoClassifiesFoodsWhenKtLacksBreadcrumbCategory() = runTest {
+        val mockNano = object : com.example.kthealthsync.data.nano.NanoDraftClient() {
+            override suspend fun classifyFood(name: String): FoodCategory? {
+                return if (name == "Перец красный сладкий") FoodCategory.VEGETABLE else null
+            }
+        }
+        val api = Proxy.newProxyInstance(KalorickeApiService::class.java.classLoader,
+            arrayOf(KalorickeApiService::class.java)) { _, method, _ ->
+            error("Unexpected api call: $method")
+        } as KalorickeApiService
+
+        val repo = KalorickeRepository(api, prefs, mockNano)
+        val food = Foodstuff(title = "Перец красный сладкий")
+        assertEquals(FoodCategory.VEGETABLE, repo.getFoodCategory(food))
+        assertEquals("VEGETABLE", prefs.categories["Перец красный сладкий"])
+    }
+
     @Test fun missingDiaryPayloadCannotBeSyncedAsZeroTotals() = runTest {
         val repo = repository { method, _ ->
             when (method) {

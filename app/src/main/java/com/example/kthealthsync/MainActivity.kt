@@ -40,11 +40,18 @@ import java.time.format.DateTimeFormatter
 
 class MainActivity : ComponentActivity() {
 
+    companion object {
+        const val ACTION_ADD_FOOD = "com.example.kthealthsync.action.ADD_FOOD"
+        const val ACTION_SCAN_BARCODE = "com.example.kthealthsync.action.SCAN_BARCODE"
+        const val ACTION_VIEW_TODAY = "com.example.kthealthsync.action.VIEW_TODAY"
+    }
+
     private lateinit var prefs: PreferencesManager
     private val healthConnectManager by lazy { HealthConnectManager(this) }
     private val searchViewModel: SearchViewModel by viewModels()
     private val dashboardViewModel: DashboardViewModel by viewModels()
     private var isFirstLaunch = true
+    private val pendingIntentAction = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
 
     override fun onResume() {
         super.onResume()
@@ -55,9 +62,27 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: android.content.Intent?) {
+        val action = intent?.action
+        if (action == ACTION_ADD_FOOD || action == ACTION_SCAN_BARCODE || action == ACTION_VIEW_TODAY) {
+            pendingIntentAction.value = action
+            intent.action = null
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.statusBarColor = android.graphics.Color.parseColor("#121212")
+        window.navigationBarColor = android.graphics.Color.parseColor("#121212")
         prefs = PreferencesManager(this)
+        handleIntent(intent)
+
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 searchViewModel.refreshMyMealsWhileActive()
@@ -70,6 +95,24 @@ class MainActivity : ComponentActivity() {
                 Toast.makeText(this, "Permissions granted!", Toast.LENGTH_SHORT).show()
             } else {
                 Toast.makeText(this, "Permissions denied", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        val requestNotificationPermission = registerForActivityResult(
+            androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+        ) { isGranted ->
+            if (isGranted) {
+                dashboardViewModel.refresh(silent = true)
+            }
+        }
+
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            if (androidx.core.content.ContextCompat.checkSelfPermission(
+                    this,
+                    android.Manifest.permission.POST_NOTIFICATIONS
+                ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) {
+                requestNotificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
             }
         }
 
@@ -92,6 +135,39 @@ class MainActivity : ComponentActivity() {
                         var initialSearchBarcode by remember { mutableStateOf<String?>(null) }
                         val selectedDate by dashboardViewModel.selectedDate.collectAsState()
                         val dashboardUiState by dashboardViewModel.uiState.collectAsState()
+
+                        val pendingAction by pendingIntentAction.collectAsState()
+                        LaunchedEffect(pendingAction) {
+                            when (pendingAction) {
+                                ACTION_VIEW_TODAY -> {
+                                    dashboardViewModel.selectDate(java.time.ZonedDateTime.now())
+                                    currentScreen = "dashboard"
+                                    pendingIntentAction.value = null
+                                }
+                                ACTION_ADD_FOOD -> {
+                                    dashboardViewModel.selectDate(java.time.ZonedDateTime.now())
+                                    preselectedMealTimeGuid = null
+                                    initialSearchBarcode = null
+                                    currentScreen = "search"
+                                    pendingIntentAction.value = null
+                                }
+                                ACTION_SCAN_BARCODE -> {
+                                    dashboardViewModel.selectDate(java.time.ZonedDateTime.now())
+                                    pendingIntentAction.value = null
+                                    com.example.kthealthsync.domain.util.BarcodeScannerHelper.scanBarcode(
+                                        context = context,
+                                        onSuccess = { barcode ->
+                                            preselectedMealTimeGuid = null
+                                            initialSearchBarcode = barcode
+                                            currentScreen = "search"
+                                        },
+                                        onFailure = { e ->
+                                            Toast.makeText(context, "${appStrings.scanError}: ${e.message}", Toast.LENGTH_SHORT).show()
+                                        }
+                                    )
+                                }
+                            }
+                        }
 
                         BackHandler(enabled = currentScreen != "dashboard") {
                             when (currentScreen) {

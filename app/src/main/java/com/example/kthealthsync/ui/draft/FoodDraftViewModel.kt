@@ -11,8 +11,6 @@ import com.example.kthealthsync.domain.draft.FoodDraftItem
 import com.example.kthealthsync.domain.draft.FoodDraftParser
 import com.example.kthealthsync.domain.draft.RecentFoodHistoryHelper
 import com.example.kthealthsync.domain.draft.RecentFoodHistoryProvider
-import com.example.kthealthsync.domain.draft.MealRepeatResolver
-import com.example.kthealthsync.domain.draft.DraftInputException
 import com.google.gson.Gson
 import com.google.mlkit.genai.common.FeatureStatus
 import kotlinx.coroutines.CancellationException
@@ -90,7 +88,7 @@ class FoodDraftViewModel(
                 _message.value = "Nano не ответил вовремя. Попробуйте позже или сократите текст."
             } catch (e: CancellationException) {
                 throw e
-            } catch (e: DraftInputException) {
+            } catch (e: IllegalArgumentException) {
                 _message.value = e.message
             } catch (e: com.google.mlkit.genai.common.GenAiException) {
                 com.example.kthealthsync.DebugLogger.addActionLog("NanoDraft: SDK error code=${e.errorCode}")
@@ -127,15 +125,6 @@ class FoodDraftViewModel(
             task?.cancel()
         }
         run(90_000) {
-            val repeat = MealRepeatResolver.recognize(text)
-            if (repeat != null) {
-                val rows = historyProvider.getMealForRepeat(repeat)
-                store(rows)
-                saved["draftSource"] = text
-                saved["selected"] = null
-                _message.value = "${repeat.mealName}: взяты продукты и порции из дневника ${if (repeat.daysAgo == 1) "за вчера" else "за позавчера"}. Проверьте перед добавлением."
-                return@run
-            }
             _availability.value = client.status()
             if (_availability.value != FeatureStatus.AVAILABLE) {
                 _message.value = "Модель пока недоступна. Проверьте её состояние."
@@ -149,7 +138,6 @@ class FoodDraftViewModel(
                 historyMeals.flatMap { meal -> meal.foods.map { it.id to it.name } })
                 .filter { it.first.isNotBlank() }.toMap()
             val rows = client.parse(text, prefs.resolvedLanguageFlow.first(), historyPrompt, historyNames)
-            MealRepeatResolver.rejectMealNames(rows)
             store(rows)
             saved["draftSource"] = text
             saved["selected"] = null

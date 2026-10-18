@@ -4,5 +4,6 @@ enum class FoodCategory {
     VEGETABLE,
     FRUIT,
     SUPPLEMENT,
+    BEVERAGE,
     OTHER
 }

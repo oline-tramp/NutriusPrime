@@ -2,6 +2,7 @@ package com.example.kthealthsync.data.nano
 
 import com.example.kthealthsync.domain.draft.FoodDraftItem
 import com.example.kthealthsync.domain.draft.FoodDraftParser
+import com.example.kthealthsync.domain.model.FoodCategory
 import com.google.gson.Gson
 import com.example.kthealthsync.domain.draft.DraftLanguagePolicy
 import com.example.kthealthsync.domain.model.AppLanguage
@@ -11,7 +12,7 @@ import com.google.mlkit.genai.prompt.TextPart
 import com.google.mlkit.genai.prompt.generateContentRequest
 
 /** Foreground-only local inference. No diary access, telemetry or cloud fallback. */
-class NanoDraftClient {
+open class NanoDraftClient {
     private val model by lazy { Generation.getClient() }
 
     suspend fun status(): Int = model.checkStatus()
@@ -23,6 +24,30 @@ class NanoDraftClient {
                 is DownloadStatus.DownloadFailed -> throw state.e
                 else -> Unit
             }
+        }
+    }
+
+    open suspend fun classifyFood(name: String): FoodCategory? {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) return null
+        return try {
+            val fullPrompt = buildString {
+                append(CLASSIFY_PROMPT)
+                append("\nFood item: ")
+                append(com.google.gson.Gson().toJson(trimmed))
+            }
+            com.example.kthealthsync.DebugLogger.addActionLog("NanoDraft: classifying food '$trimmed'")
+            val response = model.generateContent(generateContentRequest(TextPart(fullPrompt)) {
+                temperature = 0f
+                candidateCount = 1
+                maxOutputTokens = 16
+            })
+            val rawResult = response.candidates.firstOrNull()?.text?.trim()?.uppercase().orEmpty()
+            com.example.kthealthsync.DebugLogger.addActionLog("NanoDraft: classified '$trimmed' as '$rawResult'")
+            FoodCategory.entries.firstOrNull { rawResult.contains(it.name) }
+        } catch (e: Exception) {
+            com.example.kthealthsync.DebugLogger.addActionLog("NanoDraft: classify failed for '$trimmed': ${e.message}")
+            null
         }
     }
 
@@ -49,6 +74,20 @@ class NanoDraftClient {
     }
 
     companion object {
+        val CLASSIFY_PROMPT = """
+            Classify the food item into exactly one category:
+            VEGETABLE, FRUIT, SUPPLEMENT, BEVERAGE, OTHER.
+
+            Rules:
+            - VEGETABLE: vegetables, salads, fresh greens, herbs, mushrooms, beans/legumes (fresh, cooked, frozen). Potatoes and starchy tubers must be classified as OTHER.
+            - FRUIT: fresh, frozen, dried fruits and berries. Jams, sweet fruit yogurts, candies, baked goods must be classified as OTHER.
+            - SUPPLEMENT: vitamins, mineral supplements (pills, capsules, tablets, drops, powders - NOT bottled drinking water), omega-3, fish oil, creatine, melatonin, dietary supplements. Protein powder and protein bars must be classified as OTHER.
+            - BEVERAGE: water, mineral water (including Magnesia, Mattoni, etc.), tea, coffee, juice, soda, kombucha, kefir, liquid drinks. Cooking oils, syrups, sauces, soups must be classified as OTHER.
+            - OTHER: all other foods (meat, poultry, fish, dairy, bread, pastries, pasta, potatoes, sweets, snacks, protein powders, soups, composite meals).
+
+            Return ONLY the single uppercase category name (VEGETABLE, FRUIT, SUPPLEMENT, BEVERAGE, or OTHER).
+        """.trimIndent()
+
         val PROMPT = """
             Extract a draft of foods actually consumed from the user's text in its original language. Return ONLY JSON:
             {"items":[{"id":null,"name":"food and brand/flavour","sourceName":"verbatim food name from input","amount":200,"unit":"g"}]}

@@ -1,6 +1,7 @@
 package com.example.kthealthsync.ui.dashboard
 
 import android.app.DatePickerDialog
+import android.content.DialogInterface
 import android.content.Intent
 import android.util.Log
 import android.widget.Toast
@@ -32,6 +33,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DateRange
@@ -69,6 +72,13 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.input.pointer.PointerEventTimeoutCancellationException
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import kotlinx.coroutines.withTimeout
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -144,7 +154,7 @@ fun DashboardScreen(
     var totalDragX by remember { mutableFloatStateOf(0f) }
 
     val clipboardManager = LocalClipboardManager.current
-    var showPopupFor by remember { mutableStateOf<Pair<String, List<FoodBreakdown>>?>(null) }
+    var activePopupKey by remember { mutableStateOf<String?>(null) }
     var showShareDialog by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -170,6 +180,9 @@ fun DashboardScreen(
                                 selectedDate.dayOfMonth
                             )
                             dialog.datePicker.maxDate = System.currentTimeMillis()
+                            dialog.setButton(DialogInterface.BUTTON_NEUTRAL, strings.dateToday) { _, _ ->
+                                viewModel.selectDate(ZonedDateTime.now())
+                            }
                             dialog.show()
                         }) {
                             Text(dateDisplay, color = Color.White, fontSize = 20.sp)
@@ -228,7 +241,12 @@ fun DashboardScreen(
                     IconButton(onClick = onSettingsClick) {
                         Icon(Icons.Default.Settings, contentDescription = strings.settingsTitle)
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color(0xFF121212),
+                    titleContentColor = Color.White,
+                    actionIconContentColor = Color.White
+                )
             )
         }
     ) { padding ->
@@ -253,10 +271,54 @@ fun DashboardScreen(
             selectedEntryIds = selectedEntryIds.intersect(allValidIds)
         }
 
-        showPopupFor?.let { (title, breakdownList) ->
+        val activePopupData = remember(activePopupKey, uiState) {
+            val state = uiState as? DashboardUiState.Success
+            val summary = state?.summary
+            if (activePopupKey == null || summary == null) null
+            else {
+                when (activePopupKey) {
+                    "energy" -> "${strings.energy} (${strings.kcalUnit})" to summary.kcalBreakdown
+                    "protein" -> strings.protein to summary.proteinBreakdown
+                    "fat" -> strings.fat to summary.fatBreakdown
+                    "carbs" -> strings.carbs to summary.carbBreakdown
+                    "water" -> strings.water to summary.waterBreakdown
+                    "fiber" -> strings.fiber to summary.fiberBreakdown
+                    "sugar" -> strings.sugar to summary.sugarBreakdown
+                    "salt" -> strings.salt to summary.saltBreakdown
+                    "veg" -> strings.veg to summary.vegBreakdown
+                    "fruit" -> strings.fruit to summary.fruitBreakdown
+                    "veg_fruit" -> strings.vegFruitTotal to summary.vegFruitBreakdown
+                    "supps" -> strings.supps to summary.supplementBreakdown
+                    else -> null
+                }
+            }
+        }
+
+        activePopupData?.let { (title, breakdownList) ->
             AlertDialog(
-                onDismissRequest = { showPopupFor = null },
-                title = { Text(title) },
+                onDismissRequest = { activePopupKey = null },
+                title = {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = title,
+                            modifier = Modifier.weight(1f),
+                            fontWeight = FontWeight.Bold
+                        )
+                        IconButton(
+                            onClick = { viewModel.toggleWithMeals(!withMeals) }
+                        ) {
+                            Icon(
+                                imageVector = if (withMeals) Icons.Default.AccountTree else Icons.AutoMirrored.Filled.List,
+                                contentDescription = if (withMeals) "Grouped" else "Ungrouped",
+                                tint = if (withMeals) Color(0xFF81C784) else Color(0xFFAAAAAA)
+                            )
+                        }
+                    }
+                },
                 text = {
                     LazyColumn(modifier = Modifier.fillMaxWidth()) {
                         val total = breakdownList.sumOf { it.amount }
@@ -282,7 +344,7 @@ fun DashboardScreen(
                     }
                 },
                 confirmButton = {
-                    TextButton(onClick = { showPopupFor = null }) { Text(strings.close) }
+                    TextButton(onClick = { activePopupKey = null }) { Text(strings.close) }
                 }
             )
         }
@@ -348,36 +410,13 @@ fun DashboardScreen(
                         )
                     }
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                    .padding(horizontal = 16.dp)
+                    .padding(top = 16.dp, bottom = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Surface(
-                    color = Color(0xFF1E1E1E),
-                    shape = RoundedCornerShape(20.dp),
-                    border = BorderStroke(1.dp, Color(0xFF2E2E2E)),
-                    modifier = Modifier
-                        .align(Alignment.End)
-                        .padding(bottom = 6.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(start = 10.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(strings.withMeals, fontSize = 12.sp, color = Color(0xFFBBBBBB))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Switch(
-                            checked = withMeals,
-                            onCheckedChange = { viewModel.toggleWithMeals(it) },
-                            modifier = Modifier.scale(0.75f)
-                        )
-                    }
-                }
-
                 when (val state = uiState) {
                     is DashboardUiState.Loading -> {
-                        Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator()
-                        }
+                        DashboardSkeleton(rememberShimmerBrush())
                     }
                     is DashboardUiState.Error -> {
                         Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
@@ -406,10 +445,11 @@ fun DashboardScreen(
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier
+                                .padding(top = 8.dp)
                                 .size(148.dp)
                                 .clickable {
                                     if (summary.kcalBreakdown.isNotEmpty()) {
-                                        showPopupFor = "${strings.energy} (${strings.kcalUnit})" to summary.kcalBreakdown
+                                        activePopupKey = "energy"
                                     }
                                 }
                         ) {
@@ -487,7 +527,7 @@ fun DashboardScreen(
                                 color = Color(0xFFE57373),
                                 modifier = Modifier.weight(1f)
                             ) {
-                                if (summary.proteinBreakdown.isNotEmpty()) showPopupFor = strings.protein to summary.proteinBreakdown
+                                if (summary.proteinBreakdown.isNotEmpty()) activePopupKey = "protein"
                             }
                             MacroItem(
                                 name = strings.fat,
@@ -496,7 +536,7 @@ fun DashboardScreen(
                                 color = Color(0xFFFFD54F),
                                 modifier = Modifier.weight(1f)
                             ) {
-                                if (summary.fatBreakdown.isNotEmpty()) showPopupFor = strings.fat to summary.fatBreakdown
+                                if (summary.fatBreakdown.isNotEmpty()) activePopupKey = "fat"
                             }
                             MacroItem(
                                 name = strings.carbs,
@@ -505,7 +545,7 @@ fun DashboardScreen(
                                 color = Color(0xFF64B5F6),
                                 modifier = Modifier.weight(1f)
                             ) {
-                                if (summary.carbBreakdown.isNotEmpty()) showPopupFor = strings.carbs to summary.carbBreakdown
+                                if (summary.carbBreakdown.isNotEmpty()) activePopupKey = "carbs"
                             }
                         }
 
@@ -530,7 +570,7 @@ fun DashboardScreen(
                                 progressColor = Color(0xFF4FC3F7),
                                 modifier = Modifier.weight(1f)
                             ) {
-                                if (summary.waterBreakdown.isNotEmpty()) showPopupFor = strings.water to summary.waterBreakdown
+                                if (summary.waterBreakdown.isNotEmpty()) activePopupKey = "water"
                             }
 
                             val fiberStr = if (nutrientGoals.fiber > 0) "${summary.fiber.toInt()} / ${nutrientGoals.fiber.toInt()} g" else "${summary.fiber.toInt()} g"
@@ -542,7 +582,7 @@ fun DashboardScreen(
                                 progressColor = Color(0xFFAED581),
                                 modifier = Modifier.weight(1f)
                             ) {
-                                if (summary.fiberBreakdown.isNotEmpty()) showPopupFor = strings.fiber to summary.fiberBreakdown
+                                if (summary.fiberBreakdown.isNotEmpty()) activePopupKey = "fiber"
                             }
 
                             val sugarStr = if (nutrientGoals.sugar > 0) "${summary.sugar.toInt()} / ${nutrientGoals.sugar.toInt()} g" else "${summary.sugar.toInt()} g"
@@ -555,7 +595,7 @@ fun DashboardScreen(
                                 progressColor = sugarColor,
                                 modifier = Modifier.weight(1f)
                             ) {
-                                if (summary.sugarBreakdown.isNotEmpty()) showPopupFor = strings.sugar to summary.sugarBreakdown
+                                if (summary.sugarBreakdown.isNotEmpty()) activePopupKey = "sugar"
                             }
 
                             val saltStr = if (nutrientGoals.salt > 0) String.format(Locale.US, "%.1f / %.1f g", summary.salt, nutrientGoals.salt) else String.format(Locale.US, "%.1f g", summary.salt)
@@ -568,7 +608,7 @@ fun DashboardScreen(
                                 progressColor = saltColor,
                                 modifier = Modifier.weight(1f)
                             ) {
-                                if (summary.saltBreakdown.isNotEmpty()) showPopupFor = strings.salt to summary.saltBreakdown
+                                if (summary.saltBreakdown.isNotEmpty()) activePopupKey = "salt"
                             }
                         }
 
@@ -580,10 +620,10 @@ fun DashboardScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             MicroItem(strings.veg, "${summary.vegGrams.toInt()} g", modifier = Modifier.weight(1f)) {
-                                if (summary.vegBreakdown.isNotEmpty()) showPopupFor = strings.veg to summary.vegBreakdown
+                                if (summary.vegBreakdown.isNotEmpty()) activePopupKey = "veg"
                             }
                             MicroItem(strings.fruit, "${summary.fruitGrams.toInt()} g", modifier = Modifier.weight(1f)) {
-                                if (summary.fruitBreakdown.isNotEmpty()) showPopupFor = strings.fruit to summary.fruitBreakdown
+                                if (summary.fruitBreakdown.isNotEmpty()) activePopupKey = "fruit"
                             }
                             val vegFruitTarget = if (nutrientGoals.vegFruit > 0) nutrientGoals.vegFruit else 400.0
                             val totalVegFruit = (summary.vegGrams + summary.fruitGrams).toInt()
@@ -595,10 +635,10 @@ fun DashboardScreen(
                                 progressColor = Color(0xFF81C784),
                                 modifier = Modifier.weight(1f)
                             ) {
-                                if (summary.vegFruitBreakdown.isNotEmpty()) showPopupFor = strings.vegFruitTotal to summary.vegFruitBreakdown
+                                if (summary.vegFruitBreakdown.isNotEmpty()) activePopupKey = "veg_fruit"
                             }
                             MicroItem(strings.supps, "${summary.supplementCount} ${strings.pcs}", modifier = Modifier.weight(1f)) {
-                                if (summary.supplementBreakdown.isNotEmpty()) showPopupFor = strings.supps to summary.supplementBreakdown
+                                if (summary.supplementBreakdown.isNotEmpty()) activePopupKey = "supps"
                             }
                         }
 
@@ -837,7 +877,7 @@ fun DashboardScreen(
                         showCloneDialog = false
                         singleCloneTargetFood = null
                         selectedEntryIds = emptySet()
-                        showPopupFor = null
+                        activePopupKey = null
                     }
                 )
             } else if (targetFoods.size > 1) {
@@ -1268,7 +1308,8 @@ fun DailyDiarySpoiler(
     onCloneFoodToMeal: (food: Foodstuff, targetMealTimeId: String) -> Unit
 ) {
     val strings = LocalAppStrings.current
-    var isDiaryExpanded by rememberSaveable(dateStr) { mutableStateOf(true) }
+    var isDiaryExpanded by rememberSaveable(dateStr) { mutableStateOf(false) }
+    var expandedMealIds by rememberSaveable(dateStr) { mutableStateOf<Set<String>>(emptySet()) }
     var draggedFoodState by remember { mutableStateOf<DraggedFoodState?>(null) }
     val mealBounds = remember { mutableStateMapOf<String, Rect>() }
     var spoilerCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
@@ -1325,44 +1366,80 @@ fun DailyDiarySpoiler(
                     .fillMaxWidth()
                     .padding(12.dp)
             ) {
+                val onCollapserShortClick = {
+                    isDiaryExpanded = !isDiaryExpanded
+                }
+                val onCollapserLongPress = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    val allIds = mealTimes.mapNotNull { it.id }.toSet()
+                    if (expandedMealIds.isNotEmpty() || isDiaryExpanded) {
+                        isDiaryExpanded = false
+                        expandedMealIds = emptySet()
+                    } else {
+                        isDiaryExpanded = true
+                        expandedMealIds = allIds
+                    }
+                }
+
                 // Spoiler Header Panel
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { isDiaryExpanded = !isDiaryExpanded }
                         .padding(vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("🍽️", fontSize = 20.sp)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = strings.mealsHeader,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp,
-                                color = Color.White
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = Color(0xFF2A2A2A)
-                            ) {
+                    Row(
+                        modifier = Modifier
+                            .weight(1f)
+                            .pointerInput(dateStr, mealTimes, expandedMealIds, isDiaryExpanded) {
+                                awaitEachGesture {
+                                    val down = awaitFirstDown(requireUnconsumed = false)
+                                    try {
+                                        withTimeout(500L) {
+                                            val up = waitForUpOrCancellation()
+                                            if (up != null) {
+                                                onCollapserShortClick()
+                                            }
+                                        }
+                                    } catch (e: PointerEventTimeoutCancellationException) {
+                                        onCollapserLongPress()
+                                        waitForUpOrCancellation()
+                                    }
+                                }
+                            },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("🍽️", fontSize = 20.sp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    text = "${allFoods.size}",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    text = strings.mealsHeader,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp,
+                                    color = Color.White
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = Color(0xFF2A2A2A)
+                                ) {
+                                    Text(
+                                        text = "${allFoods.size}",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                            if (allFoods.isNotEmpty()) {
+                                Text(
+                                    text = String.format(strings.totalKcalFormat, totalKcal.toInt()),
+                                    fontSize = 12.sp,
+                                    color = Color.Gray
                                 )
                             }
-                        }
-                        if (allFoods.isNotEmpty()) {
-                            Text(
-                                text = String.format(strings.totalKcalFormat, totalKcal.toInt()),
-                                fontSize = 12.sp,
-                                color = Color.Gray
-                            )
                         }
                     }
 
@@ -1396,9 +1473,26 @@ fun DailyDiarySpoiler(
 
                     Spacer(modifier = Modifier.width(2.dp))
 
-                    IconButton(
-                        onClick = { isDiaryExpanded = !isDiaryExpanded },
-                        modifier = Modifier.size(34.dp)
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .pointerInput(dateStr, mealTimes, expandedMealIds, isDiaryExpanded) {
+                                awaitEachGesture {
+                                    val down = awaitFirstDown(requireUnconsumed = false)
+                                    try {
+                                        withTimeout(500L) {
+                                            val up = waitForUpOrCancellation()
+                                            if (up != null) {
+                                                onCollapserShortClick()
+                                            }
+                                        }
+                                    } catch (e: PointerEventTimeoutCancellationException) {
+                                        onCollapserLongPress()
+                                        waitForUpOrCancellation()
+                                    }
+                                }
+                            },
+                        contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = if (isDiaryExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
@@ -1479,6 +1573,14 @@ fun DailyDiarySpoiler(
                                     mealTime = mealTime,
                                     selectedEntryIds = selectedEntryIds,
                                     dateStr = dateStr,
+                                    isExpanded = expandedMealIds.contains(mealTimeId),
+                                    onToggleExpand = {
+                                        expandedMealIds = if (expandedMealIds.contains(mealTimeId)) {
+                                            expandedMealIds - mealTimeId
+                                        } else {
+                                            expandedMealIds + mealTimeId
+                                        }
+                                    },
                                     onToggleSelect = onToggleSelect,
                                     onAddFoodClick = {
                                         onAddFoodClick(mealTime.id)
@@ -1605,6 +1707,8 @@ fun MealTimeGroup(
     mealTime: MealTime,
     selectedEntryIds: Set<String>,
     dateStr: String = "",
+    isExpanded: Boolean,
+    onToggleExpand: () -> Unit,
     onToggleSelect: (String) -> Unit,
     onAddFoodClick: () -> Unit,
     onScanBarcodeClick: () -> Unit = {},
@@ -1623,14 +1727,13 @@ fun MealTimeGroup(
     draggedFoodId: String?
 ) {
     val foods = mealTime.foodstuff ?: emptyList()
-    var isExpanded by rememberSaveable(mealTime.id, dateStr) { mutableStateOf(foods.isNotEmpty()) }
     var prevFoodCount by remember(mealTime.id, dateStr) { mutableIntStateOf(foods.size) }
 
     LaunchedEffect(foods.size) {
-        if (foods.size > prevFoodCount) {
-            isExpanded = true
-        } else if (foods.isEmpty() && prevFoodCount > 0) {
-            isExpanded = false
+        if (foods.size > prevFoodCount && !isExpanded) {
+            onToggleExpand()
+        } else if (foods.isEmpty() && prevFoodCount > 0 && isExpanded) {
+            onToggleExpand()
         }
         prevFoodCount = foods.size
     }
@@ -1660,7 +1763,7 @@ fun MealTimeGroup(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { isExpanded = !isExpanded }
+                    .clickable { onToggleExpand() }
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -1720,7 +1823,7 @@ fun MealTimeGroup(
 
                 // Chevron
                 IconButton(
-                    onClick = { isExpanded = !isExpanded },
+                    onClick = onToggleExpand,
                     modifier = Modifier.size(32.dp)
                 ) {
                     Icon(
@@ -2167,6 +2270,9 @@ fun MoveEntriesDialog(
                             targetDate.monthValue - 1,
                             targetDate.dayOfMonth
                         )
+                        dialog.setButton(DialogInterface.BUTTON_NEUTRAL, strings.dateToday) { _, _ ->
+                            targetDate = LocalDate.now()
+                        }
                         dialog.show()
                     },
                     contentPadding = PaddingValues(0.dp)
@@ -2236,4 +2342,123 @@ fun MoveEntriesDialog(
         }
     )
 }
+
+@Composable
+fun rememberShimmerBrush(): Brush {
+    val transition = rememberInfiniteTransition(label = "shimmer")
+    val translateAnim by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1200f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1100, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "shimmer_anim"
+    )
+    return Brush.linearGradient(
+        colors = listOf(
+            Color(0xFF1E1E1E),
+            Color(0xFF2E2E2E),
+            Color(0xFF1E1E1E)
+        ),
+        start = Offset(translateAnim - 400f, translateAnim - 400f),
+        end = Offset(translateAnim, translateAnim)
+    )
+}
+
+@Composable
+fun DashboardSkeleton(shimmerBrush: Brush) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Circular progress chart skeleton
+        Box(
+            modifier = Modifier
+                .size(148.dp)
+                .padding(8.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                drawCircle(
+                    brush = shimmerBrush,
+                    radius = size.minDimension / 2f,
+                    style = Stroke(width = 16.dp.toPx(), cap = StrokeCap.Round)
+                )
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(
+                    modifier = Modifier
+                        .width(48.dp)
+                        .height(18.dp)
+                        .background(shimmerBrush, RoundedCornerShape(4.dp))
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Box(
+                    modifier = Modifier
+                        .width(32.dp)
+                        .height(12.dp)
+                        .background(shimmerBrush, RoundedCornerShape(3.dp))
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // 4 Macro cards skeleton
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            repeat(4) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(56.dp)
+                        .background(shimmerBrush, RoundedCornerShape(12.dp))
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Micro items grid skeleton (2 rows x 3 columns)
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            repeat(2) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    repeat(3) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(44.dp)
+                                .background(shimmerBrush, RoundedCornerShape(10.dp))
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+        HorizontalDivider(color = Color(0xFF2C2C2C), thickness = 1.dp)
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Daily diary spoiler card skeleton
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(64.dp)
+                .background(shimmerBrush, RoundedCornerShape(16.dp))
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+    }
+}
+
 

@@ -100,4 +100,11 @@ class RecentFoodHistoryHelperTest {
         assertTrue(promptText.contains("- Обед: [id: \"4582\"] \"Борщ украинский\" 350 g, [id: \"1290\"] \"Хлеб\" 50 g"))
         assertTrue(promptText.contains("Все продукты за 14 дней"))
     }
+
+    @Test
+    fun secondMealsAreNotMergedWithFirstMeals() {
+        assertEquals("Второй завтрак", RecentFoodHistoryHelper.normalizeMealName(MealTime(id = "2", title = "Второй завтрак")))
+        assertEquals("Второй ужин", RecentFoodHistoryHelper.normalizeMealName(MealTime(id = "6", title = "Druhá večeře")))
+        assertEquals("Обед", RecentFoodHistoryHelper.normalizeMealName(MealTime(id = "3", title = "Oběd")))
+    }
 }

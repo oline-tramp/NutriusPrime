@@ -1,6 +1,7 @@
 package com.example.kthealthsync.ui.dashboard
 
 import android.app.DatePickerDialog
+import android.content.DialogInterface
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -51,12 +52,15 @@ private fun formatAmount(value: Double): String {
     return String.format(Locale.US, "%.2f", rounded).trimEnd('0').trimEnd('.')
 }
 
+private val MULT_MATCH_REGEX = "^([\\d.]+)\\s*x\\s*([\\d.]+)?\\s*(.*)$".toRegex()
+private val SIMPLE_MATCH_REGEX = "^([\\d.]+)\\s*([a-zA-Z]+)$".toRegex()
+
 private fun parseInitialAmountAndUnit(unitStr: String?): Pair<String, String?> {
     if (unitStr.isNullOrBlank()) return "100" to null
     val normalized = unitStr.replace("\u00a0", " ").replace(",", ".").trim()
 
     // 1. Multiplier pattern: "150 x 1 g", "2 x kus (120 g)", "1 x 1.5 l"
-    val multMatch = "^([\\d.]+)\\s*x\\s*([\\d.]+)?\\s*(.*)$".toRegex().find(normalized)
+    val multMatch = MULT_MATCH_REGEX.find(normalized)
     if (multMatch != null) {
         val count = multMatch.groupValues[1]
         val rest = multMatch.groupValues[3].trim().ifBlank { multMatch.groupValues[2].trim() }
@@ -66,7 +70,7 @@ private fun parseInitialAmountAndUnit(unitStr: String?): Pair<String, String?> {
     }
 
     // 2. Simple pattern: "150 g", "250 ml", "0.5 kg"
-    val simpleMatch = "^([\\d.]+)\\s*([a-zA-Z]+)$".toRegex().find(normalized)
+    val simpleMatch = SIMPLE_MATCH_REGEX.find(normalized)
     if (simpleMatch != null) {
         val amount = simpleMatch.groupValues[1]
         val unit = simpleMatch.groupValues[2].lowercase()
@@ -173,9 +177,13 @@ fun EditFoodDialog(
             food.type == "meal" ||
             food.guidType == "meal"
 
-    val recipeGuid = food.guidRecipe ?: food.guid ?: food.guidType ?: ""
-    val productGuid = if (isPersonalMealCandidate && recipeGuid.isNotBlank()) recipeGuid
-        else (food.guidType ?: food.guid ?: food.guidRecipe ?: "")
+    val rawCandidateGuid = food.guidRecipe?.takeIf { it.isNotBlank() }
+        ?: (if (food.guidType != "meal") food.guidType else null)?.takeIf { it.isNotBlank() }
+        ?: (if (food.guid != "meal") food.guid else null)?.takeIf { it.isNotBlank() }
+        ?: ""
+
+    val recipeGuid = rawCandidateGuid
+    val productGuid = rawCandidateGuid
 
     var personalMealForm by remember { mutableStateOf<PersonalMealForm?>(null) }
 
@@ -212,10 +220,7 @@ fun EditFoodDialog(
     }
 
     LaunchedEffect(food) {
-        val candidateGuid = food.guidRecipe?.takeIf { it.isNotBlank() }
-            ?: food.guidType?.takeIf { it.isNotBlank() }
-            ?: food.guid?.takeIf { it.isNotBlank() }
-            ?: ""
+        val candidateGuid = rawCandidateGuid
 
         if (candidateGuid.isNotBlank() || isPersonalMealCandidate) {
             try {
@@ -525,6 +530,9 @@ fun EditFoodDialog(
                                     targetDate.monthValue - 1,
                                     targetDate.dayOfMonth
                                 )
+                                dialog.setButton(DialogInterface.BUTTON_NEUTRAL, strings.dateToday) { _, _ ->
+                                    targetDate = LocalDate.now()
+                                }
                                 dialog.show()
                             },
                             contentPadding = PaddingValues(0.dp)
@@ -584,7 +592,7 @@ fun EditFoodDialog(
                         errorMsg = strings.idNotFoundError
                         return@Button
                     }
-                    if (productGuid.isBlank()) {
+                    if (personalMealForm == null && productGuid.isBlank()) {
                         errorMsg = strings.idNotFoundError
                         return@Button
                     }

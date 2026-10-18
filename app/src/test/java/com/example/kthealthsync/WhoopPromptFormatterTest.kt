@@ -143,6 +143,9 @@ class WhoopPromptFormatterTest {
         // Verify date normalization
         org.junit.Assert.assertTrue(prompt.contains("Date: 2026-09-08"))
         // Verify directive
+        org.junit.Assert.assertTrue(prompt.contains("RETRIEVE & STATE TRACKED BEHAVIORS FIRST"))
+        org.junit.Assert.assertTrue(prompt.contains("LOG ONLY MY ACTIVELY TRACKED BEHAVIORS"))
+        org.junit.Assert.assertTrue(prompt.contains("STRICTLY DO NOT ADD UNTRACKED BEHAVIORS"))
         org.junit.Assert.assertTrue(prompt.contains("DO NOT ask for confirmation"))
         org.junit.Assert.assertTrue(prompt.contains("NEGATIVE BEHAVIORS (marked NO)"))
         // Verify totals

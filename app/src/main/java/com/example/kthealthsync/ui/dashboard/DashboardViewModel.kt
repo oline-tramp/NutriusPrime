@@ -41,6 +41,9 @@ sealed interface DashboardUiState {
     data class Error(val message: String) : DashboardUiState
 }
 
+private val COUNT_PORTION_REGEX = "([\\d.]+)\\s*(?:x\\s*)?(?:porce|porc|portion)".toRegex(RegexOption.IGNORE_CASE)
+private val PCT_REGEX = "([\\d.]+)\\s*%".toRegex()
+
 class DashboardViewModel(application: Application) : AndroidViewModel(application) {
 
     private val prefs = PreferencesManager(application)
@@ -95,8 +98,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun selectDate(date: ZonedDateTime) {
-        val now = ZonedDateTime.now()
-        if (!date.isAfter(now)) {
+        val today = java.time.LocalDate.now(date.zone)
+        if (!date.toLocalDate().isAfter(today)) {
             _selectedDate.value = date
             loadDailyData()
         }
@@ -114,7 +117,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun toggleWithMeals(withMeals: Boolean) {
         _withMeals.value = withMeals
-        loadDailyData()
+        loadDailyData(silent = true)
     }
 
     fun refresh(silent: Boolean = false) {
@@ -180,6 +183,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             )
 
             _uiState.value = DashboardUiState.Success(updatedSummary, updatedDiary)
+            updateNotificationIfToday(updatedSummary)
             Log.d("NutriusAdd", "Optimistic add applied for $title ($kcal kcal to meal $targetMealId)")
             DebugLogger.addActionLog("Optimistic add: $title ($kcal kcal to meal $targetMealId)")
         }
@@ -201,6 +205,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             )
             val updatedSummary = recalculateOptimisticSummary(currentState.summary, removedFoods)
             _uiState.value = DashboardUiState.Success(updatedSummary, updatedDiary)
+            updateNotificationIfToday(updatedSummary)
         }
 
         viewModelScope.launch {
@@ -254,6 +259,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 currentState.summary
             }
             _uiState.value = DashboardUiState.Success(updatedSummary, updatedDiary)
+            updateNotificationIfToday(updatedSummary)
             Log.d("NutriusDrag", "Optimistic UI state applied successfully")
         } else {
             Log.w("NutriusDrag", "Cannot apply optimistic update: currentState is not Success or times is null")
@@ -370,7 +376,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     suspend fun isPersonalMeal(food: Foodstuff): Boolean {
-        if (food.isRecipe == true || !food.components.isNullOrEmpty() || !food.guidRecipe.isNullOrBlank()) return true
+        if (food.isRecipe == true || !food.components.isNullOrEmpty() || !food.guidRecipe.isNullOrBlank() ||
+            food.type == "meal" || food.guidType == "meal") return true
         val cookie = repository.getCookie()
         if (cookie.isEmpty()) return false
         val mealMap = repository.getMealMap(cookie)
@@ -380,13 +387,15 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     suspend fun getPersonalMealGuid(food: Foodstuff): String? {
-        val guid = food.guidRecipe ?: food.guid
+        val candidate = food.guidRecipe?.takeIf { it.isNotBlank() }
+            ?: (if (food.guidType != "meal") food.guidType else null)?.takeIf { it.isNotBlank() }
+            ?: (if (food.guid != "meal") food.guid else null)?.takeIf { it.isNotBlank() }
         val cookie = repository.getCookie()
-        if (cookie.isEmpty()) return guid
+        if (cookie.isEmpty()) return candidate
         val mealMap = repository.getMealMap(cookie)
         val name = food.title ?: food.name ?: food.nazev ?: ""
-        return if (guid != null && mealMap.containsValue(guid)) guid
-            else mealMap[name] ?: guid
+        return if (candidate != null && mealMap.containsValue(candidate)) candidate
+            else mealMap[name] ?: candidate
     }
 
     fun cloneEntries(
@@ -396,12 +405,93 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         onComplete: ((Boolean) -> Unit)? = null
     ) {
         val dateToUse = targetDate ?: _selectedDate.value.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+
+        // Optimistic UI update for snappy feedback
+        val currentState = _uiState.value
+        val isSameDay = targetDate.isNullOrBlank() ||
+                targetDate == _selectedDate.value.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+
+        if (isSameDay && currentState is DashboardUiState.Success && currentState.diaryResponse?.data?.times != null) {
+            val allTimes = currentState.diaryResponse.data.times
+            val clonedFoods = foods.map { food ->
+                food.copy(id = "temp_clone_${System.currentTimeMillis()}_${food.id ?: food.guid ?: ""}")
+            }
+            val updatedTimes = allTimes.map { mealTime ->
+                val currentList = mealTime.foodstuff ?: emptyList()
+                if (mealTime.id == targetTimeId) {
+                    mealTime.copy(foodstuff = currentList + clonedFoods)
+                } else {
+                    mealTime
+                }
+            }
+            val updatedDiary = currentState.diaryResponse.copy(
+                data = currentState.diaryResponse.data.copy(times = updatedTimes)
+            )
+            _uiState.value = DashboardUiState.Success(currentState.summary, updatedDiary)
+            updateNotificationIfToday(currentState.summary)
+        }
+
         viewModelScope.launch {
             try {
                 var allSuccess = true
                 for (food in foods) {
-                    val guid = food.guidType ?: food.guid
-                    if (guid.isNullOrBlank()) continue
+                    if (isPersonalMeal(food)) {
+                        val mealGuid = getPersonalMealGuid(food)
+                        if (!mealGuid.isNullOrBlank()) {
+                            try {
+                                val form = getPersonalMealForm(mealGuid)
+                                val matchedOpt = if (!food.unit.isNullOrBlank()) {
+                                    val unitLower = food.unit.lowercase()
+                                    when {
+                                        unitLower.contains("%") -> form.units.find { it.multiplier == -1.0 }
+                                        unitLower.contains("porce") || unitLower.contains("porc") || unitLower.contains("portion") ->
+                                            form.units.find { it.multiplier == -2.0 }
+                                        unitLower.contains("g") -> form.units.find { it.multiplier == 1.0 }
+                                            ?: form.units.find { it.multiplier != null && it.multiplier > 0 }
+                                        else -> null
+                                    }
+                                } else null
+
+                                val selectedUnit = matchedOpt ?: form.defaultUnit
+                                val portionGrams = NutrientParser.parsePortionGrams(food.unit)
+                                val amount = when {
+                                    selectedUnit.multiplier == 1.0 && portionGrams > 0 -> portionGrams
+                                    selectedUnit.multiplier == -2.0 -> {
+                                        COUNT_PORTION_REGEX.find(food.unit ?: "")?.groupValues?.get(1)?.toDoubleOrNull() ?: 1.0
+                                    }
+                                    selectedUnit.multiplier == -1.0 -> {
+                                        PCT_REGEX.find(food.unit ?: "")?.groupValues?.get(1)?.toDoubleOrNull() ?: 100.0
+                                    }
+                                    portionGrams > 0 && selectedUnit.multiplier != null && selectedUnit.multiplier > 0 ->
+                                        portionGrams / selectedUnit.multiplier
+                                    else -> form.defaultAmount
+                                }
+
+                                val portion = form.portion(
+                                    selectedUnit.id ?: "",
+                                    amount,
+                                    dateToUse,
+                                    targetTimeId
+                                )
+                                val resp = repository.addPersonalMeal(portion.request)
+                                if (resp.code != 0 && resp.code != null) {
+                                    allSuccess = false
+                                }
+                                continue
+                            } catch (e: Exception) {
+                                if (e is CancellationException) throw e
+                                Log.w("NutriusPrime", "Failed to clone as personal meal, trying standard food: ${e.message}")
+                            }
+                        }
+                    }
+
+                    val guid = (if (food.guidType != "meal") food.guidType else null)?.takeIf { it.isNotBlank() }
+                        ?: (if (food.guid != "meal") food.guid else null)?.takeIf { it.isNotBlank() }
+                        ?: food.guidRecipe?.takeIf { it.isNotBlank() }
+                    if (guid.isNullOrBlank()) {
+                        allSuccess = false
+                        continue
+                    }
 
                     val portion = NutrientParser.parsePortionGrams(food.unit).coerceAtLeast(1.0)
                     val multStr = if (portion == portion.toInt().toDouble()) portion.toInt().toString() else String.format(Locale.US, "%.1f", portion)
@@ -427,6 +517,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 if (e is CancellationException) throw e
                 Log.e("NutriusPrime", "cloneEntries error: ${e.message}", e)
                 DebugLogger.addActionLog("cloneEntries error: ${e.message}")
+                loadDailyData(silent = true)
                 onComplete?.invoke(false)
             }
         }
@@ -452,7 +543,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             dCarb += NutrientParser.parseNutrient(f.carbohydrate)
             dSugar += NutrientParser.parseNutrient(f.sugar)
             dSalt += NutrientParser.parseNutrient(f.salt)
-            dWater += HydrationCalculator.parseLiquidVolumeMl(f)
+            dWater += HydrationCalculator.parseLiquidVolumeMl(f, repository.getFoodCategorySync(f))
             dFiber += NutrientParser.parseNutrient(f.fiber)
         }
 
@@ -466,6 +557,30 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             water = (currentSummary.water - dWater).coerceAtLeast(0.0),
             fiber = (currentSummary.fiber - dFiber).coerceAtLeast(0.0)
         )
+    }
+
+    private fun updateNotificationIfToday(summary: DailySummary) {
+        val isToday = _selectedDate.value.toLocalDate() == ZonedDateTime.now().toLocalDate()
+        if (isToday) {
+            viewModelScope.launch {
+                try {
+                    val notifEnabled = prefs.dailyNotificationEnabledFlow.first()
+                    if (notifEnabled) {
+                        val goals = prefs.nutrientGoalsFlow.first()
+                        val lang = prefs.resolvedLanguageFlow.first()
+                        com.example.kthealthsync.domain.util.DailyNotificationHelper.updateNotification(
+                            getApplication(),
+                            summary,
+                            goals,
+                            lang
+                        )
+                    }
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    Log.e("NutriusNotif", "Failed to update notification: ${e.message}")
+                }
+            }
+        }
     }
 
     private fun loadDailyData(silent: Boolean = false) {
@@ -484,6 +599,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             },
             onSuccess = { (summary, diaryResponse) ->
                 _uiState.value = DashboardUiState.Success(summary, diaryResponse)
+                updateNotificationIfToday(summary)
                 if (date.toLocalDate().isBefore(ZonedDateTime.now().toLocalDate())) {
                     try {
                         healthConnectManager.syncDailySummary(summary, date, version)

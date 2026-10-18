@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Nutrius Prime</string>
+    <string name="shortcut_add_food">Add Food</string>
+    <string name="shortcut_add_food_long">Add Food</string>
+    <string name="shortcut_scan_barcode">Scan Barcode</string>
+    <string name="shortcut_scan_barcode_long">Scan Barcode</string>
+</resources>

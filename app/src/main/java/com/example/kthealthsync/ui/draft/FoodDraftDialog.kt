@@ -21,7 +21,6 @@ import androidx.lifecycle.LifecycleEventObserver
 import com.example.kthealthsync.domain.draft.DraftUnit
 import com.example.kthealthsync.domain.draft.FoodDraftItem
 import com.example.kthealthsync.domain.draft.FoodDraftParser
-import com.example.kthealthsync.domain.draft.MealRepeatResolver
 import com.google.mlkit.genai.common.FeatureStatus
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -99,9 +98,9 @@ fun FoodDraftDialog(model: FoodDraftViewModel, onClose: () -> Unit, onSearch: (F
                         TextButton(onClick = model::cancel) { Text("Остановить") }
                     } else {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            if (availability == FeatureStatus.DOWNLOADABLE && MealRepeatResolver.recognize(input) == null) {
+                            if (availability == FeatureStatus.DOWNLOADABLE) {
                                 Button(onClick = model::download) { Text("Скачать модель") }
-                            } else if (availability == FeatureStatus.AVAILABLE || MealRepeatResolver.recognize(input) != null) {
+                            } else if (availability == FeatureStatus.AVAILABLE) {
                                 Button(enabled = input.isNotBlank(), onClick = {
                                     if (rows.isEmpty()) model.generate() else confirmReplace = true
                                 }) { Text(if (rows.isEmpty()) "Подготовить черновик" else "Разобрать заново") }

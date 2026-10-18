@@ -24,6 +24,7 @@ class PreferencesManager(private val context: Context) : com.example.kthealthsyn
         val SYNC_HOUR_KEY = intPreferencesKey("sync_hour")
         val SYNC_MINUTE_KEY = intPreferencesKey("sync_minute")
         val AUTO_SYNC_ENABLED_KEY = booleanPreferencesKey("auto_sync_enabled")
+        val DAILY_NOTIFICATION_ENABLED_KEY = booleanPreferencesKey("daily_notification_enabled")
         val APP_LANGUAGE_KEY = stringPreferencesKey("app_language")
 
         // Nutritional Goals Keys
@@ -37,7 +38,7 @@ class PreferencesManager(private val context: Context) : com.example.kthealthsyn
         val GOAL_VEG_FRUIT_KEY = doublePreferencesKey("goal_veg_fruit")
         val GOAL_WATER_KEY = doublePreferencesKey("goal_water")
 
-        private const val CATEGORY_CACHE_VERSION = 2
+        private const val CATEGORY_CACHE_VERSION = 4
         private const val PREF_CATEGORY_CACHE_VERSION = "__cat_cache_ver__"
     }
 
@@ -45,16 +46,10 @@ class PreferencesManager(private val context: Context) : com.example.kthealthsyn
         val sharedPrefs = context.getSharedPreferences("food_categories", Context.MODE_PRIVATE)
         val currentVersion = sharedPrefs.getInt(PREF_CATEGORY_CACHE_VERSION, 1)
         if (currentVersion < CATEGORY_CACHE_VERSION) {
-            val editor = sharedPrefs.edit()
-            // Invalidate entries previously cached as "OTHER"
-            // because in earlier versions, supplements were classified as OTHER
-            for ((key, value) in sharedPrefs.all) {
-                if (value == "OTHER") {
-                    editor.remove(key)
-                }
-            }
-            editor.putInt(PREF_CATEGORY_CACHE_VERSION, CATEGORY_CACHE_VERSION)
-            editor.apply()
+            sharedPrefs.edit()
+                .clear()
+                .putInt(PREF_CATEGORY_CACHE_VERSION, CATEGORY_CACHE_VERSION)
+                .apply()
         }
         sharedPrefs
     }
@@ -65,6 +60,7 @@ class PreferencesManager(private val context: Context) : com.example.kthealthsyn
     val syncHourFlow: Flow<Int> = context.dataStore.data.map { it[SYNC_HOUR_KEY] ?: 6 }
     val syncMinuteFlow: Flow<Int> = context.dataStore.data.map { it[SYNC_MINUTE_KEY] ?: 0 }
     val autoSyncEnabledFlow: Flow<Boolean> = context.dataStore.data.map { it[AUTO_SYNC_ENABLED_KEY] ?: false }
+    val dailyNotificationEnabledFlow: Flow<Boolean> = context.dataStore.data.map { it[DAILY_NOTIFICATION_ENABLED_KEY] ?: true }
     val appLanguageFlow: Flow<AppLanguage> = context.dataStore.data.map { prefs ->
         AppLanguage.fromCode(prefs[APP_LANGUAGE_KEY])
     }
@@ -112,6 +108,10 @@ class PreferencesManager(private val context: Context) : com.example.kthealthsyn
 
     suspend fun setAutoSync(enabled: Boolean) {
         context.dataStore.edit { it[AUTO_SYNC_ENABLED_KEY] = enabled }
+    }
+
+    suspend fun setDailyNotificationEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[DAILY_NOTIFICATION_ENABLED_KEY] = enabled }
     }
 
     suspend fun saveAppLanguage(language: AppLanguage) {
