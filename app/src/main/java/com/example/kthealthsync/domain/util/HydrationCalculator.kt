@@ -3,7 +3,6 @@ package com.example.kthealthsync.domain.util
 import com.example.kthealthsync.Foodstuff
 import com.example.kthealthsync.domain.model.FoodCategory
 import com.example.kthealthsync.domain.util.NutrientParser.parseNutrient
-import com.example.kthealthsync.domain.util.NutrientParser.parsePortionGrams
 
 object HydrationCalculator {
 
@@ -12,12 +11,11 @@ object HydrationCalculator {
     private val SIMPLE_LIQUID_REGEX = "([\\d.]+)\\s*(ml|l|dl|cl|g|kg)\\b".toRegex(RegexOption.IGNORE_CASE)
     private val PAREN_UNIT_REGEX = "\\(([\\d.]+)\\s*([a-zA-Z]+)\\)".toRegex()
     private val COUNT_X_REGEX = "([\\d.]+)\\s*x".toRegex()
-    private val SIMPLE_COUNT_REGEX = "^([\\d.]+)\\s*(?:ks|kus|piece|шт)?$".toRegex()
 
     /**
-     * Parses the liquid volume in milliliters (ml) for beverages and hydration.
-     * Uses FoodCategory.BEVERAGE for high-precision drink detection,
-     * food.water for soups/broths, and excludes non-beverage cooking oils/fats.
+     * Parses the liquid volume in milliliters (ml) for fluid hydration.
+     * Beverages (FoodCategory.BEVERAGE) are converted to ml (density ≈ 1 g/ml).
+     * Composite meals/soups without expanded components use their recipe water content.
      */
     fun parseLiquidVolumeMl(food: Foodstuff, category: FoodCategory? = null): Double {
         val components = food.foodstuff ?: food.items ?: food.ingredients ?: food.components
@@ -25,8 +23,15 @@ object HydrationCalculator {
             val compVol = components.sumOf { parseLiquidVolumeMl(it, category) }
             if (compVol > 0) return compVol
         }
-        val fname = food.title ?: food.name ?: food.nazev
-        return parseLiquidVolumeMl(fname, food.unit, food.water, category)
+
+        // Soups and broths with recipe water content
+        if (food.isRecipe == true) {
+            val waterVal = parseNutrient(food.water)
+            if (waterVal > 0) return waterVal
+        }
+
+        val fname = food.title ?: food.name ?: food.nazev ?: ""
+        return parseLiquidVolumeMl(fname, food.unit, food.water, category ?: FoodHtmlParser.parseCategoryFromUrl(food.url, fname))
     }
 
     fun parseLiquidVolumeMl(title: String?, unitStr: String?, waterStr: String?, category: FoodCategory? = null): Double {
@@ -37,40 +42,14 @@ object HydrationCalculator {
             return 0.0
         }
 
-        // Soups and broths: water content represents fluid hydration
-        if (isSoupOrBroth(titleLower)) {
-            val waterVal = parseNutrient(waterStr)
-            if (waterVal > 0) return waterVal
+        // Only beverages count towards hydration
+        val isDrink = category == FoodCategory.BEVERAGE || (category == null && isBeverageFallback(titleLower, unitStr))
+        if (!isDrink) {
+            return 0.0
         }
-
-        // Watermelon and melons (~91.5% water)
-        if (isWatermelonOrMelon(titleLower)) {
-            val waterVal = parseNutrient(waterStr)
-            if (waterVal > 0) return waterVal
-            val g = parsePortionGrams(unitStr)
-            if (g > 0) return g * 0.915
-        }
-
-        // Cucumbers (~95.2% water)
-        if (isCucumber(titleLower)) {
-            val waterVal = parseNutrient(waterStr)
-            if (waterVal > 0) return waterVal
-            val g = parsePortionGrams(unitStr)
-            if (g > 0) return g * 0.952
-            val normalizedG = (unitStr ?: "").replace("\u00a0", " ").replace(",", ".").trim()
-            val simpleCount = SIMPLE_COUNT_REGEX.find(normalizedG)?.groupValues?.get(1)?.toDoubleOrNull()
-            if (simpleCount != null && simpleCount > 0) {
-                return simpleCount * 250.0 * 0.952
-            }
-        }
-
-        val isDrink = category == FoodCategory.BEVERAGE || isBeverageTitleFallback(titleLower)
 
         if (unitStr.isNullOrBlank()) {
-            if (isDrink) {
-                return parseNutrient(waterStr)
-            }
-            return 0.0
+            return parseNutrient(waterStr)
         }
 
         val normalized = unitStr.replace("\u00a0", " ").replace(",", ".").trim()
@@ -86,7 +65,7 @@ object HydrationCalculator {
             if (ml > 0) return ml
         }
 
-        // 2. Liquid multiplier: '300 x 1 ml', '500 x 1 g', '1 x 1.5 l', etc.
+        // 2. Multiplier: '300 x 1 ml', '500 x 1 g', '1 x 1.5 l', etc.
         val multMatch = MULT_LIQUID_REGEX.find(cleaned)
         if (multMatch != null) {
             val count = multMatch.groupValues[1].toDoubleOrNull() ?: 1.0
@@ -120,60 +99,24 @@ object HydrationCalculator {
                 titleLower.contains("sirup") || titleLower.contains("syrup")
     }
 
-    private fun isSoupOrBroth(titleLower: String): Boolean {
-        return titleLower.contains("polévk") || titleLower.contains("polevk") ||
-                titleLower.contains("vývar") || titleLower.contains("vyvar") ||
-                titleLower.contains("soup") || titleLower.contains("broth") ||
-                titleLower.contains("boršč") || titleLower.contains("borsch") ||
-                titleLower.contains("ramen") || titleLower.contains("pho") ||
-                titleLower.contains("kulajda") || titleLower.contains("česnečk") ||
-                titleLower.contains("soljanka")
-    }
+    private val BEVERAGE_WORD_REGEX = "\\b(voda|water|minerálka|mineralka|minerální|mineralni|mineral|magnesia|mattoni|kefír|kefir|birell|cola|čaj|caj|tea|káva|kava|coffee|džus|dzus|juice)\\b".toRegex(RegexOption.IGNORE_CASE)
 
-    private fun isWatermelonOrMelon(titleLower: String): Boolean {
-        if (titleLower.contains("sirup") || titleLower.contains("syrup") ||
-            titleLower.contains("žvýkačk") || titleLower.contains("zvykack") ||
-            titleLower.contains("bonbon") || titleLower.contains("aroma") ||
-            titleLower.contains("likér") || titleLower.contains("liker")) {
-            return false
+    /**
+     * Fallback only when category was not provided (e.g. standalone tests or raw text).
+     * Any liquid unit (ml, l, dl, cl) is considered a drink unless it was cooking oil/sauce.
+     * Grams are only considered a drink if title contains common drink words.
+     */
+    private fun isBeverageFallback(titleLower: String, unitStr: String?): Boolean {
+        val u = (unitStr ?: "").lowercase()
+        val isLiquidUnit = u.contains("ml") || u.contains("dl") || u.contains("cl") ||
+                Regex("\\b(l|litr|litru|litry)\\b").containsMatchIn(u)
+        if (isLiquidUnit) {
+            return true
         }
-        return titleLower.contains("meloun") ||
-                titleLower.contains("watermelon") ||
-                titleLower.contains("арбуз") ||
-                titleLower.contains("дыня") ||
-                titleLower.contains("cantaloupe")
+        return BEVERAGE_WORD_REGEX.containsMatchIn(titleLower)
     }
 
-    private fun isCucumber(titleLower: String): Boolean {
-        if (titleLower.contains("kysel") || titleLower.contains("nakládan") ||
-            titleLower.contains("nakladan") || titleLower.contains("steril") ||
-            titleLower.contains("pickl") || titleLower.contains("солен") ||
-            titleLower.contains("маринован") || titleLower.contains("квашен") ||
-            titleLower.contains("znojmo") || titleLower.contains("relish")) {
-            return false
-        }
-        return titleLower.contains("okurk") ||
-                titleLower.contains("cucumber") ||
-                titleLower.contains("огурец") ||
-                titleLower.contains("огурц") ||
-                titleLower.contains("gurke")
-    }
-
-    private val TEA_WORD_REGEX = "\\b(?:tea|teas)\\b".toRegex(RegexOption.IGNORE_CASE)
-
-    /** Fallback when category is not provided (e.g. standalone tests or raw input). */
-    private fun isBeverageTitleFallback(titleLower: String): Boolean {
-        return titleLower.contains("voda") || titleLower.contains("water") ||
-                titleLower.contains("minerál") || titleLower.contains("mineral") ||
-                titleLower.contains("čaj") || titleLower.contains("чай") || TEA_WORD_REGEX.containsMatchIn(titleLower) ||
-                titleLower.contains("káva") || titleLower.contains("coffee") || titleLower.contains("кофе") ||
-                titleLower.contains("džus") || titleLower.contains("juice") || titleLower.contains("сок") ||
-                titleLower.contains("kefír") || titleLower.contains("kefir") ||
-                titleLower.contains("birell") || titleLower.contains("cola") ||
-                titleLower.contains("magnesia") || titleLower.contains("mattoni")
-    }
-
-    private fun convertToMl(amount: Double, unit: String, isDrink: Boolean = false): Double {
+    private fun convertToMl(amount: Double, unit: String, isDrink: Boolean): Double {
         return when (unit) {
             "ml" -> amount
             "l" -> amount * 1000.0

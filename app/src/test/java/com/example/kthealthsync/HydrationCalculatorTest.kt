@@ -118,7 +118,7 @@ class HydrationCalculatorTest {
         )
         assertEquals(0.0, HydrationCalculator.parseLiquidVolumeMl(sriracha), 0.01)
 
-        // Watermelon with KT water field (e.g. 500g has 457.5g water)
+        // Watermelon without BEVERAGE category returns 0.0 (counted as fruit quota, not fluid)
         val watermelonKt = Foodstuff(
             title = "Meloun vodní",
             name = null, nazev = null, energy = "155.0", protein = "3.0", carbohydrate = "37.5",
@@ -126,9 +126,8 @@ class HydrationCalculatorTest {
             foodstuff = null, items = null, ingredients = null, components = null,
             guid = "w1", guidRecipe = null, isRecipe = false, unit = "500 x 1 g"
         )
-        assertEquals(457.5, HydrationCalculator.parseLiquidVolumeMl(watermelonKt), 0.01)
+        assertEquals(0.0, HydrationCalculator.parseLiquidVolumeMl(watermelonKt), 0.01)
 
-        // Watermelon fallback in grams without water field (1000g * 0.915 = 915.0 ml)
         val watermelonFallbackG = Foodstuff(
             title = "Арбуз свежий",
             name = null, nazev = null, energy = null, protein = null, carbohydrate = null,
@@ -136,9 +135,8 @@ class HydrationCalculatorTest {
             foodstuff = null, items = null, ingredients = null, components = null,
             guid = "w2", guidRecipe = null, isRecipe = false, unit = "1000 x 1 g"
         )
-        assertEquals(915.0, HydrationCalculator.parseLiquidVolumeMl(watermelonFallbackG), 0.01)
+        assertEquals(0.0, HydrationCalculator.parseLiquidVolumeMl(watermelonFallbackG), 0.01)
 
-        // Watermelon fallback in kg without water field (1 x 1 kg -> 915.0 ml)
         val watermelonFallbackKg = Foodstuff(
             title = "Watermelon",
             name = null, nazev = null, energy = null, protein = null, carbohydrate = null,
@@ -146,7 +144,7 @@ class HydrationCalculatorTest {
             foodstuff = null, items = null, ingredients = null, components = null,
             guid = "w3", guidRecipe = null, isRecipe = false, unit = "1 x 1 kg"
         )
-        assertEquals(915.0, HydrationCalculator.parseLiquidVolumeMl(watermelonFallbackKg), 0.01)
+        assertEquals(0.0, HydrationCalculator.parseLiquidVolumeMl(watermelonFallbackKg), 0.01)
 
         // Watermelon syrup should be excluded
         val watermelonSyrup = Foodstuff(
@@ -188,7 +186,7 @@ class HydrationCalculatorTest {
         )
         assertEquals(1500.0, HydrationCalculator.parseLiquidVolumeMl(mattoniBottleG), 0.01)
 
-        // Fresh cucumber (okurka salátová, 200 g) -> 200 * 0.952 = 190.4 ml
+        // Fresh cucumber (okurka salátová, 200 g) -> 0.0 (counted as vegetable quota)
         val cucumberG = Foodstuff(
             title = "Okurka salátová",
             name = null, nazev = null, energy = null, protein = null, carbohydrate = null,
@@ -196,9 +194,9 @@ class HydrationCalculatorTest {
             foodstuff = null, items = null, ingredients = null, components = null,
             guid = "c1", guidRecipe = null, isRecipe = false, unit = "200 g"
         )
-        assertEquals(190.4, HydrationCalculator.parseLiquidVolumeMl(cucumberG), 0.01)
+        assertEquals(0.0, HydrationCalculator.parseLiquidVolumeMl(cucumberG), 0.01)
 
-        // Fresh cucumber Russian (Огурцы свежие, 150 x 1 g) -> 150 * 0.952 = 142.8 ml
+        // Fresh cucumber Russian (Огурцы свежие, 150 x 1 g) -> 0.0
         val cucumberRu = Foodstuff(
             title = "Огурцы свежие",
             name = null, nazev = null, energy = null, protein = null, carbohydrate = null,
@@ -206,7 +204,7 @@ class HydrationCalculatorTest {
             foodstuff = null, items = null, ingredients = null, components = null,
             guid = "c2", guidRecipe = null, isRecipe = false, unit = "150 x 1 g"
         )
-        assertEquals(142.8, HydrationCalculator.parseLiquidVolumeMl(cucumberRu), 0.01)
+        assertEquals(0.0, HydrationCalculator.parseLiquidVolumeMl(cucumberRu), 0.01)
 
         // Pickled cucumber (Kyselé okurky) -> excluded from raw hydration (0.0 ml)
         val pickledCucumber = Foodstuff(
