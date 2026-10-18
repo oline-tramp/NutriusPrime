@@ -271,30 +271,30 @@ fun DashboardScreen(
             selectedEntryIds = selectedEntryIds.intersect(allValidIds)
         }
 
-        val activePopupData = remember(activePopupKey, uiState) {
+        val activePopupData = remember(activePopupKey, uiState, strings) {
             val state = uiState as? DashboardUiState.Success
             val summary = state?.summary
             if (activePopupKey == null || summary == null) null
             else {
                 when (activePopupKey) {
-                    "energy" -> "${strings.energy} (${strings.kcalUnit})" to summary.kcalBreakdown
-                    "protein" -> strings.protein to summary.proteinBreakdown
-                    "fat" -> strings.fat to summary.fatBreakdown
-                    "carbs" -> strings.carbs to summary.carbBreakdown
-                    "water" -> strings.water to summary.waterBreakdown
-                    "fiber" -> strings.fiber to summary.fiberBreakdown
-                    "sugar" -> strings.sugar to summary.sugarBreakdown
-                    "salt" -> strings.salt to summary.saltBreakdown
-                    "veg" -> strings.veg to summary.vegBreakdown
-                    "fruit" -> strings.fruit to summary.fruitBreakdown
-                    "veg_fruit" -> strings.vegFruitTotal to summary.vegFruitBreakdown
-                    "supps" -> strings.supps to summary.supplementBreakdown
+                    "energy" -> Triple("${strings.energy} (${strings.kcalUnit})", summary.kcalBreakdown, strings.kcalUnit)
+                    "protein" -> Triple(strings.protein, summary.proteinBreakdown, "g")
+                    "fat" -> Triple(strings.fat, summary.fatBreakdown, "g")
+                    "carbs" -> Triple(strings.carbs, summary.carbBreakdown, "g")
+                    "water" -> Triple(strings.water, summary.waterBreakdown, "ml")
+                    "fiber" -> Triple(strings.fiber, summary.fiberBreakdown, "g")
+                    "sugar" -> Triple(strings.sugar, summary.sugarBreakdown, "g")
+                    "salt" -> Triple(strings.salt, summary.saltBreakdown, "g")
+                    "veg" -> Triple(strings.veg, summary.vegBreakdown, "g")
+                    "fruit" -> Triple(strings.fruit, summary.fruitBreakdown, "g")
+                    "veg_fruit" -> Triple(strings.vegFruitTotal, summary.vegFruitBreakdown, "g")
+                    "supps" -> Triple(strings.supps, summary.supplementBreakdown, "pcs")
                     else -> null
                 }
             }
         }
 
-        activePopupData?.let { (title, breakdownList) ->
+        activePopupData?.let { (title, breakdownList, unitStr) ->
             AlertDialog(
                 onDismissRequest = { activePopupKey = null },
                 title = {
@@ -325,7 +325,7 @@ fun DashboardScreen(
                         items(breakdownList) { item ->
                             RecursiveBreakdownItem(
                                 item = item,
-                                title = title,
+                                unitStr = unitStr,
                                 grandTotal = total,
                                 depth = 0,
                                 onAddFood = { breakdown ->
@@ -1132,15 +1132,14 @@ fun MicroItem(
 @Composable
 fun RecursiveBreakdownItem(
     item: FoodBreakdown,
-    title: String,
+    unitStr: String,
     grandTotal: Double,
     depth: Int = 0,
     onAddFood: ((FoodBreakdown) -> Unit)? = null
 ) {
     var expanded by remember { mutableStateOf(false) }
     val pct = if (grandTotal > 0) (item.amount / grandTotal) * 100 else 0.0
-    val isSupp = title.contains("Supplements") || title.contains("Supps")
-    val unitStr = if (title == "Calories") "kcal" else if (title == "💧 Water") "ml" else if (isSupp) "pcs" else "g"
+    val isIntegerUnit = unitStr == "pcs" || unitStr == "ккал" || unitStr == "kcal" || unitStr == "ml"
     val hasChildren = item.components.isNotEmpty()
 
     Column(modifier = Modifier.fillMaxWidth().padding(start = (depth * 16).dp)) {
@@ -1166,7 +1165,7 @@ fun RecursiveBreakdownItem(
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(horizontalAlignment = Alignment.End) {
-                    val amountStr = if (isSupp) "${item.amount.toInt()} $unitStr" else "${String.format(Locale.US, "%.1f", item.amount)} $unitStr"
+                    val amountStr = if (isIntegerUnit) "${item.amount.toInt()} $unitStr" else "${String.format(Locale.US, "%.1f", item.amount)} $unitStr"
                     Text(amountStr, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     Text("${String.format(Locale.US, "%.1f", pct)}%", fontSize = 12.sp, color = Color.Gray)
                 }
@@ -1189,7 +1188,7 @@ fun RecursiveBreakdownItem(
         }
         if (expanded && hasChildren) {
             item.components.forEach { child ->
-                RecursiveBreakdownItem(child, title, grandTotal, depth + 1, onAddFood)
+                RecursiveBreakdownItem(child, unitStr, grandTotal, depth + 1, onAddFood)
             }
         }
     }
