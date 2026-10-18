@@ -14,8 +14,8 @@ object HydrationCalculator {
 
     /**
      * Parses the liquid volume in milliliters (ml) for fluid hydration.
-     * Beverages (FoodCategory.BEVERAGE) are converted to ml (density ≈ 1 g/ml).
-     * Composite meals/soups without expanded components use their recipe water content.
+     * Strictly relies on FoodCategory.BEVERAGE (or composite recipe water for soups/broths).
+     * Zero hardcoded name dictionaries.
      */
     fun parseLiquidVolumeMl(food: Foodstuff, category: FoodCategory? = null): Double {
         val components = food.foodstuff ?: food.items ?: food.ingredients ?: food.components
@@ -31,20 +31,13 @@ object HydrationCalculator {
         }
 
         val fname = food.title ?: food.name ?: food.nazev ?: ""
-        return parseLiquidVolumeMl(fname, food.unit, food.water, category ?: FoodHtmlParser.parseCategoryFromUrl(food.url, fname))
+        val resolvedCategory = category ?: FoodHtmlParser.parseCategoryFromUrl(food.url, fname)
+        return parseLiquidVolumeMl(fname, food.unit, food.water, resolvedCategory)
     }
 
     fun parseLiquidVolumeMl(title: String?, unitStr: String?, waterStr: String?, category: FoodCategory? = null): Double {
-        val titleLower = (title ?: "").lowercase()
-
-        // Exclude cooking oils, butter, lard, sauces, dressings which may be measured in ml
-        if (isCookingOilOrSauce(titleLower)) {
-            return 0.0
-        }
-
-        // Only beverages count towards hydration
-        val isDrink = category == FoodCategory.BEVERAGE || (category == null && isBeverageFallback(titleLower, unitStr))
-        if (!isDrink) {
+        // Strictly only beverages count towards fluid hydration
+        if (category != FoodCategory.BEVERAGE) {
             return 0.0
         }
 
@@ -61,7 +54,7 @@ object HydrationCalculator {
             val amt = parenMatch.groupValues[1].toDoubleOrNull() ?: 0.0
             val unit = parenMatch.groupValues[2].lowercase()
             val count = COUNT_X_REGEX.find(cleaned)?.groupValues?.get(1)?.toDoubleOrNull() ?: 1.0
-            val ml = convertToMl(count * amt, unit, isDrink)
+            val ml = convertToMl(count * amt, unit)
             if (ml > 0) return ml
         }
 
@@ -71,7 +64,7 @@ object HydrationCalculator {
             val count = multMatch.groupValues[1].toDoubleOrNull() ?: 1.0
             val amt = multMatch.groupValues[2].takeIf { it.isNotBlank() }?.toDoubleOrNull() ?: 1.0
             val unit = multMatch.groupValues[3].lowercase()
-            val ml = convertToMl(count * amt, unit, isDrink)
+            val ml = convertToMl(count * amt, unit)
             if (ml > 0) return ml
         }
 
@@ -80,50 +73,21 @@ object HydrationCalculator {
         if (simpleMatch != null) {
             val amt = simpleMatch.groupValues[1].toDoubleOrNull() ?: 0.0
             val unit = simpleMatch.groupValues[2].lowercase()
-            val ml = convertToMl(amt, unit, isDrink)
+            val ml = convertToMl(amt, unit)
             if (ml > 0) return ml
         }
 
-        return 0.0
+        return parseNutrient(waterStr)
     }
 
-    private fun isCookingOilOrSauce(titleLower: String): Boolean {
-        return titleLower.contains("olej") || titleLower.contains(" oil") ||
-                titleLower.contains("sádlo") || titleLower.contains("sadlo") ||
-                titleLower.contains("máslo") || titleLower.contains("maslo") ||
-                titleLower.contains("butter") || titleLower.contains("lard") ||
-                titleLower.contains("omáčk") || titleLower.contains("omack") ||
-                titleLower.contains("sauce") || titleLower.contains("dressing") ||
-                titleLower.contains("kečup") || titleLower.contains("ketchup") ||
-                titleLower.contains("ocet") || titleLower.contains("vinegar") ||
-                titleLower.contains("sirup") || titleLower.contains("syrup")
-    }
-
-    private val BEVERAGE_WORD_REGEX = "\\b(voda|water|minerálka|mineralka|minerální|mineralni|mineral|magnesia|mattoni|kefír|kefir|birell|cola|čaj|caj|tea|káva|kava|coffee|džus|dzus|juice)\\b".toRegex(RegexOption.IGNORE_CASE)
-
-    /**
-     * Fallback only when category was not provided (e.g. standalone tests or raw text).
-     * Any liquid unit (ml, l, dl, cl) is considered a drink unless it was cooking oil/sauce.
-     * Grams are only considered a drink if title contains common drink words.
-     */
-    private fun isBeverageFallback(titleLower: String, unitStr: String?): Boolean {
-        val u = (unitStr ?: "").lowercase()
-        val isLiquidUnit = u.contains("ml") || u.contains("dl") || u.contains("cl") ||
-                Regex("\\b(l|litr|litru|litry)\\b").containsMatchIn(u)
-        if (isLiquidUnit) {
-            return true
-        }
-        return BEVERAGE_WORD_REGEX.containsMatchIn(titleLower)
-    }
-
-    private fun convertToMl(amount: Double, unit: String, isDrink: Boolean): Double {
+    private fun convertToMl(amount: Double, unit: String): Double {
         return when (unit) {
             "ml" -> amount
             "l" -> amount * 1000.0
             "dl" -> amount * 100.0
             "cl" -> amount * 10.0
-            "g" -> if (isDrink) amount else 0.0
-            "kg" -> if (isDrink) amount * 1000.0 else 0.0
+            "g" -> amount
+            "kg" -> amount * 1000.0
             else -> 0.0
         }
     }
