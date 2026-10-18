@@ -10,10 +10,13 @@ import com.google.mlkit.genai.common.DownloadStatus
 import com.google.mlkit.genai.prompt.Generation
 import com.google.mlkit.genai.prompt.TextPart
 import com.google.mlkit.genai.prompt.generateContentRequest
+import kotlinx.coroutines.sync.withLock
 
 /** Foreground-only local inference. No diary access, telemetry or cloud fallback. */
 open class NanoDraftClient {
     private val model by lazy { Generation.getClient() }
+
+    private val classifyMutex = kotlinx.coroutines.sync.Mutex()
 
     suspend fun status(): Int = model.checkStatus()
 
@@ -27,10 +30,10 @@ open class NanoDraftClient {
         }
     }
 
-    open suspend fun classifyFood(name: String): FoodCategory? {
+    open suspend fun classifyFood(name: String): FoodCategory? = classifyMutex.withLock {
         val trimmed = name.trim()
-        if (trimmed.isBlank()) return null
-        return try {
+        if (trimmed.isBlank()) return@withLock null
+        try {
             val fullPrompt = buildString {
                 append(CLASSIFY_PROMPT)
                 append("\nFood item: ")

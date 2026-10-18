@@ -285,24 +285,23 @@ class KalorickeRepository(
         val persisted = prefs.getFoodCategory(key)
         if (persisted != null) {
             val cat = try { FoodCategory.valueOf(persisted) } catch (_: Exception) { FoodCategory.OTHER }
-            if (cat != FoodCategory.OTHER) {
-                categoryMemoryCache[key] = cat
-                return cat
-            }
+            categoryMemoryCache[key] = cat
+            return cat
         }
 
         // 1. Direct URL on food if present
         val directCat = FoodHtmlParser.parseCategoryFromUrl(food.url, food.title ?: food.name ?: food.nazev)
-        if (directCat != null && directCat != FoodCategory.OTHER) {
+        if (directCat != null) {
             categoryMemoryCache[key] = directCat
             prefs.saveFoodCategory(key, directCat.name)
             return directCat
         }
 
-        // 2. Fetch category from Kalorické Tabulky (API form URL / HTML breadcrumbs)
+        // 3. Fetch category from Kalorické Tabulky (API form URL / HTML breadcrumbs)
         var cat = fetchFoodCategoryFromWeb(food)
+        var lookupSucceeded = (cat != null)
 
-        // 3. Fallback to Gemini Nano if KT gave OTHER or couldn't categorize
+        // 4. Fallback to Gemini Nano if KT gave OTHER or couldn't categorize
         if (cat == null || cat == FoodCategory.OTHER) {
             val title = food.title ?: food.name ?: food.nazev
             if (!title.isNullOrBlank()) {
@@ -312,21 +311,19 @@ class KalorickeRepository(
                     if (e is CancellationException) throw e
                     null
                 }
-                if (nanoCat != null && nanoCat != FoodCategory.OTHER) {
+                if (nanoCat != null) {
                     cat = nanoCat
+                    lookupSucceeded = true
                 }
             }
         }
 
-        if (cat == null) {
-            return FoodCategory.OTHER
+        val finalCat = cat ?: FoodCategory.OTHER
+        if (lookupSucceeded) {
+            categoryMemoryCache[key] = finalCat
+            prefs.saveFoodCategory(key, finalCat.name)
         }
-
-        categoryMemoryCache[key] = cat
-        if (cat != FoodCategory.OTHER) {
-            prefs.saveFoodCategory(key, cat.name)
-        }
-        return cat
+        return finalCat
     }
 
     private suspend fun fetchFoodCategoryFromWeb(food: Foodstuff): FoodCategory? {
