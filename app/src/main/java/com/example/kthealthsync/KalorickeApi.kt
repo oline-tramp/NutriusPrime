@@ -142,6 +142,67 @@ data class AddFoodRequest(
     )
 )
 
+data class DiaryTimeOptionItem(
+    val id: String,
+    val title: String,
+    val foodstuff: Any? = null,
+    val notes: Any? = null,
+    val templateNotes: Any? = null,
+    val actions: Boolean = false,
+    val rating: Any? = null,
+    val energyTotal: Any? = null,
+    val energyTotalUnit: Any? = null,
+    val dailyTimeUserRatio: Any? = null
+)
+
+val DEFAULT_DIARY_TIME_OPTIONS = listOf(
+    DiaryTimeOptionItem(id = "1", title = "Snídaně"),
+    DiaryTimeOptionItem(id = "2", title = "Dopolední svačina"),
+    DiaryTimeOptionItem(id = "3", title = "Oběd"),
+    DiaryTimeOptionItem(id = "4", title = "Odpolední svačina"),
+    DiaryTimeOptionItem(id = "5", title = "Večeře"),
+    DiaryTimeOptionItem(id = "6", title = "Druhá večeře")
+)
+
+data class AddCustomFoodRequest(
+    val guid: String = "0",
+    val title: String,
+    val url: String? = null,
+    val diaryTimeGuid: String,
+    val diaryTimeOptions: List<DiaryTimeOptionItem>? = DEFAULT_DIARY_TIME_OPTIONS,
+    val date: String,
+    val timeUser: Boolean = false,
+    val time: String? = null,
+    val multiplier: String? = null,
+    val unitGuid: String? = null,
+    val unitOptions: Any? = null,
+    val showUnits: Any? = null,
+    val mealGuid: String? = null,
+    val energy: String,
+    val energyUnit: String = "kcal",
+    val detailValues: Boolean = true,
+    val protein: String,
+    val carbohydrate: String,
+    val fat: String,
+    val fiber: String? = null,
+    val saturatedFattyAcid: String? = null,
+    val transFattyAcid: String? = null,
+    val monoSaturated: String? = null,
+    val polySaturated: String? = null,
+    val cholesterol: String? = null,
+    val sugar: String? = null,
+    val calcium: String? = null,
+    val salt: String? = null,
+    val sodium: String? = null,
+    val water: String? = null,
+    val phe: String? = null,
+    val alcohol: String? = null,
+    val favorite: Boolean? = null,
+    val status: String? = null,
+    val guidUserFrom: String? = null,
+    val guidUserTo: String? = null
+)
+
 data class AddFoodResponse(
     val code: Int?,
     val message: String?
@@ -262,6 +323,14 @@ interface KalorickeApiService {
     @POST("user/foodstuff/add?format=json")
     suspend fun addFoodstuff(
         @Body request: AddFoodRequest,
+        @Header("Cookie") cookie: String,
+        @Header("User-Agent") userAgent: String = "Mozilla/5.0 (Linux; Android 14; Pixel 7 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        @Header("Accept") accept: String = "application/json, text/plain, */*"
+    ): AddFoodResponse
+
+    @POST("user/foodstuff/add?format=json")
+    suspend fun addCustomFood(
+        @Body request: AddCustomFoodRequest,
         @Header("Cookie") cookie: String,
         @Header("User-Agent") userAgent: String = "Mozilla/5.0 (Linux; Android 14; Pixel 7 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
         @Header("Accept") accept: String = "application/json, text/plain, */*"

@@ -322,4 +322,8 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
     suspend fun addFood(request: AddFoodRequest): AddFoodResponse {
         return repository.addFoodstuff(request)
     }
+
+    suspend fun addCustomFood(request: AddCustomFoodRequest): AddFoodResponse {
+        return repository.addCustomFood(request)
+    }
 }

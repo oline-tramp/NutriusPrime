@@ -290,6 +290,29 @@ class KalorickeRepositoryTest {
         assertEquals(listOf("addPersonalMeal"), calls)
     }
 
+    @Test fun addCustomFoodDelegatesToApiAndReturnsResponse() = runTest {
+        val customRequest = AddCustomFoodRequest(
+            guid = "0",
+            title = "Test Food",
+            diaryTimeGuid = "2",
+            date = "19.10.2026",
+            energy = "250",
+            protein = "20",
+            carbohydrate = "30",
+            fat = "5"
+        )
+        val expectedResp = AddFoodResponse(0, "Potravina byla úspěšně zapsána")
+        val repo = repository { method, args ->
+            assertEquals("addCustomFood", method)
+            assertSame(customRequest, args[0])
+            assertTrue((args[1] as String).contains("JSESSIONID=test"))
+            expectedResp
+        }
+        val result = repo.addCustomFood(customRequest)
+        assertEquals(expectedResp, result)
+        assertEquals(listOf("addCustomFood"), calls)
+    }
+
     private class MemoryPreferences : RepositoryPreferences {
         override val cookieFlow = MutableStateFlow("JSESSIONID=test")
         override val emailFlow = MutableStateFlow("")

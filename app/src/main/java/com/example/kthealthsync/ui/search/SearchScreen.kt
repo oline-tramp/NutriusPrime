@@ -7,11 +7,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AddCircleOutline
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import com.example.kthealthsync.ui.search.components.CreateCustomFoodDialog
 import com.example.kthealthsync.ui.draft.FoodDraftDialog
 import com.example.kthealthsync.ui.draft.FoodDraftViewModel
 import com.example.kthealthsync.domain.draft.FoodDraftParser
@@ -74,6 +77,8 @@ fun SearchScreen(
 
     var selectedItem by remember { mutableStateOf<AutocompleteResponseItem?>(null) }
     var showAddDialog by remember { mutableStateOf(false) }
+    var showCreateCustomDialog by remember { mutableStateOf(false) }
+    var customFoodInitialTitle by remember { mutableStateOf("") }
     var selectedTab by remember { mutableStateOf(0) } // 0: Frequent, 1: Favorites
 
     val focusRequester = remember { FocusRequester() }
@@ -140,6 +145,14 @@ fun SearchScreen(
                         viewModel.clearSearch()
                         onBack()
                     }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = strings.cancel) }
+                },
+                actions = {
+                    IconButton(onClick = {
+                        customFoodInitialTitle = query.trim()
+                        showCreateCustomDialog = true
+                    }) {
+                        Icon(Icons.Default.Add, contentDescription = strings.createCustomFood)
+                    }
                 }
             )
         }
@@ -200,6 +213,39 @@ fun SearchScreen(
             if (errorMessage != null) {
                 Text(errorMessage!!, color = MaterialTheme.colorScheme.error)
                 TextButton(onClick = { viewModel.retry() }) { Text(strings.retry) }
+            }
+
+            if (query.trim().isNotEmpty()) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                        .clickable {
+                            customFoodInitialTitle = query.trim()
+                            showCreateCustomDialog = true
+                        },
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AddCircleOutline,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = String.format(strings.customFoodPrompt, query.trim()),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
 
             if (isSearching || (isFetchingDefaults && query.length < 3)) {
@@ -302,6 +348,20 @@ fun SearchScreen(
             showDraft = false
             keyboardController?.hide()
         })
+    }
+    if (showCreateCustomDialog) {
+        CreateCustomFoodDialog(
+            initialTitle = customFoodInitialTitle,
+            date = date,
+            initialMealTimeGuid = preselectedMealTimeGuid,
+            viewModel = viewModel,
+            onDismiss = { showCreateCustomDialog = false },
+            onSuccess = { info ->
+                showCreateCustomDialog = false
+                viewModel.clearSearch()
+                onFoodAdded(info)
+            }
+        )
     }
 }
 

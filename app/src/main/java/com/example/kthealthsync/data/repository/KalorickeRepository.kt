@@ -521,6 +521,12 @@ class KalorickeRepository(
         }
     }
 
+    suspend fun addCustomFood(request: AddCustomFoodRequest): AddFoodResponse {
+        return executeWithRetry(operationName = "addCustomFood", retryTransientErrors = false) { cookieParam ->
+            api.addCustomFood(request, cookieParam)
+        }
+    }
+
     /**
      * Fetches official user daily goals (DDD / Target energy and macros)
      * directly from Kalorické Tabulky user profile settings API.
