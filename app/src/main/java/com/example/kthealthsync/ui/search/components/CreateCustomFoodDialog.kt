@@ -8,6 +8,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircleOutline
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.*
@@ -73,6 +74,10 @@ fun CreateCustomFoodDialog(
     var isSubmitting by remember { mutableStateOf(false) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
 
+    var aiPrompt by remember { mutableStateOf(initialTitle.ifBlank { "" }) }
+    var isAiParsing by remember { mutableStateOf(false) }
+    var aiError by remember { mutableStateOf<String?>(null) }
+
     val energyVal = energyText.replace(',', '.').trim().toDoubleOrNull()
     val proteinVal = proteinText.replace(',', '.').trim().toDoubleOrNull()
     val carbsVal = carbsText.replace(',', '.').trim().toDoubleOrNull()
@@ -114,6 +119,108 @@ fun CreateCustomFoodDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                // AI Prompt with Gemini Nano
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = aiPrompt,
+                            onValueChange = {
+                                aiPrompt = it
+                                aiError = null
+                            },
+                            label = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.AutoAwesome,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(strings.customFoodAiPromptLabel)
+                                }
+                            },
+                            placeholder = { Text(strings.customFoodAiPromptHint, fontSize = 12.sp) },
+                            trailingIcon = {
+                                if (isAiParsing) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    IconButton(
+                                        onClick = {
+                                            if (aiPrompt.isNotBlank()) {
+                                                coroutineScope.launch {
+                                                    isAiParsing = true
+                                                    aiError = null
+                                                    try {
+                                                        val parsed = viewModel.parseCustomFoodWithNano(aiPrompt)
+                                                        if (parsed != null) {
+                                                            parsed.title?.let { if (it.isNotBlank()) title = it }
+                                                            parsed.energy?.let { energyText = formatNumber(it) ?: "" }
+                                                            parsed.protein?.let { proteinText = formatNumber(it) ?: "" }
+                                                            parsed.carbs?.let { carbsText = formatNumber(it) ?: "" }
+                                                            parsed.fat?.let { fatText = formatNumber(it) ?: "" }
+                                                            if (parsed.fiber != null) {
+                                                                fiberText = formatNumber(parsed.fiber) ?: ""
+                                                                showMoreDetails = true
+                                                            }
+                                                            if (parsed.sugar != null) {
+                                                                sugarText = formatNumber(parsed.sugar) ?: ""
+                                                                showMoreDetails = true
+                                                            }
+                                                            if (parsed.satFat != null) {
+                                                                satFatText = formatNumber(parsed.satFat) ?: ""
+                                                                showMoreDetails = true
+                                                            }
+                                                            if (parsed.salt != null) {
+                                                                saltText = formatNumber(parsed.salt) ?: ""
+                                                                showMoreDetails = true
+                                                            }
+                                                        } else {
+                                                            aiError = strings.customFoodAiError
+                                                        }
+                                                    } catch (e: Exception) {
+                                                        aiError = e.message ?: strings.customFoodAiError
+                                                    } finally {
+                                                        isAiParsing = false
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        enabled = aiPrompt.isNotBlank() && !isAiParsing
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.AutoAwesome,
+                                            contentDescription = strings.customFoodAiFill,
+                                            tint = if (aiPrompt.isNotBlank()) MaterialTheme.colorScheme.primary else Color.Gray
+                                        )
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            maxLines = 3
+                        )
+                        if (aiError != null) {
+                            Text(
+                                aiError!!,
+                                color = MaterialTheme.colorScheme.error,
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(start = 4.dp)
+                            )
+                        }
+                    }
+                }
+
                 // Title
                 OutlinedTextField(
                     value = title,

@@ -76,7 +76,50 @@ open class NanoDraftClient {
         return FoodDraftParser.parseForSearch(rawResult, text, historyNames)
     }
 
+    open suspend fun parseCustomFood(text: String): CustomFoodParsed? {
+        val trimmed = text.trim()
+        if (trimmed.isBlank()) return null
+        return try {
+            val fullPrompt = buildString {
+                append(CUSTOM_FOOD_PROMPT)
+                append("\nText:\n")
+                append(com.google.gson.Gson().toJson(trimmed))
+            }
+            com.example.kthealthsync.DebugLogger.addActionLog("NanoDraft: parsing custom food prompt (${fullPrompt.length} chars)")
+            val response = model.generateContent(generateContentRequest(TextPart(fullPrompt)) {
+                temperature = 0f
+                candidateCount = 1
+                maxOutputTokens = 256
+            })
+            val raw = response.candidates.firstOrNull()?.text?.trim().orEmpty()
+            com.example.kthealthsync.DebugLogger.addActionLog("NanoDraft: custom food raw response: $raw")
+            parseCustomFoodJson(raw)
+        } catch (e: Exception) {
+            com.example.kthealthsync.DebugLogger.addActionLog("NanoDraft: parseCustomFood failed: ${e.message}")
+            null
+        }
+    }
+
     companion object {
+        val CUSTOM_FOOD_PROMPT = """
+            Extract food title and nutritional values from the user's text into JSON.
+            Return ONLY a single valid JSON object:
+            {"title":"name or null","energy":number or null,"protein":number or null,"carbs":number or null,"fat":number or null,"fiber":number or null,"sugar":number or null,"satFat":number or null,"salt":number or null}
+
+            Rules:
+            - title: food name if mentioned in text, otherwise null.
+            - energy: calories in kcal (number). If only kJ is mentioned, calculate kcal = kJ / 4.184.
+            - protein: protein in grams (number).
+            - carbs: carbohydrates in grams (number).
+            - fat: fat in grams (number).
+            - fiber: dietary fiber in grams (number or null).
+            - sugar: sugars in grams (number or null).
+            - satFat: saturated fats in grams (number or null).
+            - salt: salt in grams (number or null).
+            - Numbers must be numeric without units or text.
+            - Return ONLY the JSON object, without markdown or backticks.
+        """.trimIndent()
+
         val CLASSIFY_PROMPT = """
             Classify the food item into exactly one category:
             VEGETABLE, FRUIT, SUPPLEMENT, BEVERAGE, OTHER.
@@ -119,3 +162,29 @@ open class NanoDraftClient {
         """.trimIndent()
     }
 }
+
+data class CustomFoodParsed(
+    val title: String? = null,
+    val energy: Double? = null,
+    val protein: Double? = null,
+    val carbs: Double? = null,
+    val fat: Double? = null,
+    val fiber: Double? = null,
+    val sugar: Double? = null,
+    val satFat: Double? = null,
+    val salt: Double? = null
+)
+
+fun parseCustomFoodJson(raw: String): CustomFoodParsed? {
+    if (raw.isBlank()) return null
+    val start = raw.indexOf('{')
+    val end = raw.lastIndexOf('}')
+    if (start == -1 || end == -1 || end <= start) {
+        return null
+    }
+    val jsonCandidate = raw.substring(start, end + 1).trim()
+    return runCatching {
+        com.google.gson.Gson().fromJson(jsonCandidate, CustomFoodParsed::class.java)
+    }.getOrNull()
+}
+

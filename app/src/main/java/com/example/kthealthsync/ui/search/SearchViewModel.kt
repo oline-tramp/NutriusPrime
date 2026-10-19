@@ -326,4 +326,10 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
     suspend fun addCustomFood(request: AddCustomFoodRequest): AddFoodResponse {
         return repository.addCustomFood(request)
     }
+
+    private val nanoClient by lazy { com.example.kthealthsync.data.nano.NanoDraftClient() }
+
+    suspend fun parseCustomFoodWithNano(text: String): com.example.kthealthsync.data.nano.CustomFoodParsed? {
+        return nanoClient.parseCustomFood(text)
+    }
 }

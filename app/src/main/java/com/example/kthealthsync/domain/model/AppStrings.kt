@@ -117,6 +117,10 @@ data class AppStrings(
     val customFoodSuccess: String,
     val moreDetails: String,
     val saturatedFatShort: String,
+    val customFoodAiPromptLabel: String,
+    val customFoodAiPromptHint: String,
+    val customFoodAiFill: String,
+    val customFoodAiError: String,
 
     // Settings
     val settingsTitle: String,
@@ -245,6 +249,10 @@ val RuStrings = AppStrings(
     customFoodSuccess = "Продукт успешно записан",
     moreDetails = "Дополнительно",
     saturatedFatShort = "Насыщ. жиры",
+    customFoodAiPromptLabel = "Заполнить через Gemini Nano",
+    customFoodAiPromptHint = "Например: Батончик 60г, 200 ккал, 20г белка, 5г жиров, 15г углей",
+    customFoodAiFill = "Распознать с помощью Nano",
+    customFoodAiError = "Не удалось распознать данные из текста",
 
     settingsTitle = "Настройки",
     appLanguageLabel = "Язык интерфейса",
@@ -370,6 +378,10 @@ val CsStrings = AppStrings(
     customFoodSuccess = "Potravina byla úspěšně zapsána",
     moreDetails = "Další podrobnosti",
     saturatedFatShort = "Nasycené tuky",
+    customFoodAiPromptLabel = "Vyplnit pomocí Gemini Nano",
+    customFoodAiPromptHint = "Např.: Tyčinka 60g, 200 kcal, 20g bílkovin, 5g tuků, 15g sacharidů",
+    customFoodAiFill = "Rozpoznat pomocí Nano",
+    customFoodAiError = "Nepodařilo se rozpoznat data z textu",
 
     settingsTitle = "Nastavení",
     appLanguageLabel = "Jazyk rozhraní",
@@ -495,6 +507,10 @@ val EnStrings = AppStrings(
     customFoodSuccess = "Food was successfully logged",
     moreDetails = "More details",
     saturatedFatShort = "Sat. fat",
+    customFoodAiPromptLabel = "Fill with Gemini Nano",
+    customFoodAiPromptHint = "e.g.: Bar 60g, 200 kcal, 20g protein, 5g fat, 15g carbs",
+    customFoodAiFill = "Parse with Nano",
+    customFoodAiError = "Could not parse data from text",
 
     settingsTitle = "Settings",
     appLanguageLabel = "App Language",
