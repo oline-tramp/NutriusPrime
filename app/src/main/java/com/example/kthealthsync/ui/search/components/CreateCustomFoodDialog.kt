@@ -364,31 +364,18 @@ fun CreateCustomFoodDialog(
                         color = Color.LightGray,
                         modifier = Modifier.weight(1f)
                     )
-                    FilterChip(
-                        selected = isLinked,
+                    IconButton(
                         onClick = {
                             isLinked = !isLinked
                             activeEditingField = null
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = if (isLinked) Icons.Default.Link else Icons.Default.LinkOff,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        },
-                        label = {
-                            Text(
-                                if (isLinked) strings.proportionalLinked else strings.proportionalUnlinked,
-                                fontSize = 11.sp
-                            )
-                        },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                            selectedLeadingIconColor = MaterialTheme.colorScheme.primary
+                        }
+                    ) {
+                        Icon(
+                            imageVector = if (isLinked) Icons.Default.Link else Icons.Default.LinkOff,
+                            contentDescription = if (isLinked) strings.proportionalLinked else strings.proportionalUnlinked,
+                            tint = if (isLinked) MaterialTheme.colorScheme.primary else Color(0xFFAAAAAA)
                         )
-                    )
+                    }
                 }
 
                 // Energy (kcal)

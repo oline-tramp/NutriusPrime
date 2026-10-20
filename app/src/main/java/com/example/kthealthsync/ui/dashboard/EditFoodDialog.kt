@@ -2,6 +2,7 @@ package com.example.kthealthsync.ui.dashboard
 
 import android.app.DatePickerDialog
 import android.content.DialogInterface
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -11,6 +12,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.LinkOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -56,6 +61,11 @@ private fun formatAmount(value: Double): String {
 private fun formatDouble(d: Double?): String? {
     if (d == null || d <= 0.0) return null
     return formatAmount(d)
+}
+
+private fun formatNumber(value: Double?): String? {
+    if (value == null) return null
+    return formatAmount(value)
 }
 
 private val MULT_MATCH_REGEX = "^([\\d.]+)\\s*x\\s*([\\d.]+)?\\s*(.*)$".toRegex()
@@ -177,6 +187,108 @@ fun EditFoodDialog(
         mutableDoubleStateOf(NutrientParser.parseNutrient(food.salt) / portionGrams * 100.0)
     }
 
+    val initKcal = remember(food.energy) { NutrientParser.parseNutrient(food.energy) }
+    val initProt = remember(food.protein) { NutrientParser.parseNutrient(food.protein) }
+    val initCarbs = remember(food.carbohydrate) { NutrientParser.parseNutrient(food.carbohydrate) }
+    val initFat = remember(food.fat) { NutrientParser.parseNutrient(food.fat) }
+    val initFiber = remember(food.fiber) { NutrientParser.parseNutrient(food.fiber) }
+    val initSugar = remember(food.sugar) { NutrientParser.parseNutrient(food.sugar) }
+    val initSalt = remember(food.salt) { NutrientParser.parseNutrient(food.salt) }
+
+    var energyText by remember { mutableStateOf(formatNumber(initKcal) ?: "") }
+    var proteinText by remember { mutableStateOf(formatNumber(initProt) ?: "") }
+    var carbsText by remember { mutableStateOf(formatNumber(initCarbs) ?: "") }
+    var fatText by remember { mutableStateOf(formatNumber(initFat) ?: "") }
+    var fiberText by remember { mutableStateOf(formatNumber(initFiber) ?: "") }
+    var sugarText by remember { mutableStateOf(formatNumber(initSugar) ?: "") }
+    var saltText by remember { mutableStateOf(formatNumber(initSalt) ?: "") }
+
+    var isLinked by remember { mutableStateOf(true) }
+    var hasCustomizedMacros by remember { mutableStateOf(false) }
+    var showMoreDetails by remember { mutableStateOf(initSugar > 0.0 || initSalt > 0.0) }
+
+    var activeEditingField by remember { mutableStateOf<String?>(null) }
+    var baseAmount by remember { mutableStateOf<Double?>(null) }
+    var baseEnergy by remember { mutableStateOf<Double?>(null) }
+    var baseProtein by remember { mutableStateOf<Double?>(null) }
+    var baseCarbs by remember { mutableStateOf<Double?>(null) }
+    var baseFat by remember { mutableStateOf<Double?>(null) }
+    var baseFiber by remember { mutableStateOf<Double?>(null) }
+    var baseSugar by remember { mutableStateOf<Double?>(null) }
+    var baseSalt by remember { mutableStateOf<Double?>(null) }
+
+    fun captureBaseline(field: String) {
+        activeEditingField = field
+        baseAmount = amountText.replace(',', '.').trim().toDoubleOrNull()
+        baseEnergy = energyText.replace(',', '.').trim().toDoubleOrNull()
+        baseProtein = proteinText.replace(',', '.').trim().toDoubleOrNull()
+        baseCarbs = carbsText.replace(',', '.').trim().toDoubleOrNull()
+        baseFat = fatText.replace(',', '.').trim().toDoubleOrNull()
+        baseFiber = fiberText.replace(',', '.').trim().toDoubleOrNull()
+        baseSugar = sugarText.replace(',', '.').trim().toDoubleOrNull()
+        baseSalt = saltText.replace(',', '.').trim().toDoubleOrNull()
+    }
+
+    fun onFieldChange(field: String, newText: String) {
+        if (field != "amount") {
+            hasCustomizedMacros = true
+        }
+
+        if (!isLinked) {
+            when (field) {
+                "amount" -> amountText = newText
+                "energy" -> energyText = newText
+                "protein" -> proteinText = newText
+                "carbs" -> carbsText = newText
+                "fat" -> fatText = newText
+                "fiber" -> fiberText = newText
+                "sugar" -> sugarText = newText
+                "salt" -> saltText = newText
+            }
+            return
+        }
+
+        if (activeEditingField != field) {
+            captureBaseline(field)
+        }
+
+        when (field) {
+            "amount" -> amountText = newText
+            "energy" -> energyText = newText
+            "protein" -> proteinText = newText
+            "carbs" -> carbsText = newText
+            "fat" -> fatText = newText
+            "fiber" -> fiberText = newText
+            "sugar" -> sugarText = newText
+            "salt" -> saltText = newText
+        }
+
+        val newNum = newText.replace(',', '.').trim().toDoubleOrNull()
+        val baseNum = when (field) {
+            "amount" -> baseAmount
+            "energy" -> baseEnergy
+            "protein" -> baseProtein
+            "carbs" -> baseCarbs
+            "fat" -> baseFat
+            "fiber" -> baseFiber
+            "sugar" -> baseSugar
+            "salt" -> baseSalt
+            else -> null
+        }
+
+        if (newNum != null && baseNum != null && baseNum > 0.0) {
+            val ratio = newNum / baseNum
+            if (field != "amount") baseAmount?.let { amountText = formatNumber(it * ratio) ?: "" }
+            if (field != "energy") baseEnergy?.let { energyText = formatNumber(it * ratio) ?: "" }
+            if (field != "protein") baseProtein?.let { proteinText = formatNumber(it * ratio) ?: "" }
+            if (field != "carbs") baseCarbs?.let { carbsText = formatNumber(it * ratio) ?: "" }
+            if (field != "fat") baseFat?.let { fatText = formatNumber(it * ratio) ?: "" }
+            if (field != "fiber") baseFiber?.let { fiberText = formatNumber(it * ratio) ?: "" }
+            if (field != "sugar") baseSugar?.let { sugarText = formatNumber(it * ratio) ?: "" }
+            if (field != "salt") baseSalt?.let { saltText = formatNumber(it * ratio) ?: "" }
+        }
+    }
+
     val isPersonalMealCandidate = food.isRecipe == true ||
             !food.components.isNullOrEmpty() ||
             !food.guidRecipe.isNullOrBlank() ||
@@ -222,6 +334,20 @@ fun EditFoodDialog(
                 macros["vláknina"]?.let { fiberPer100 = it }
                 macros["cukry"]?.let { sugarPer100 = it }
                 macros["sůl"]?.let { saltPer100 = it }
+
+                if (!hasCustomizedMacros) {
+                    val mult = selectedUnit?.multiplier ?: 1.0
+                    val amt = amountText.replace(',', '.').toDoubleOrNull() ?: 1.0
+                    val effGrams = amt * mult
+                    val scale = effGrams / 100.0
+                    energyText = formatNumber(energyPer100 * scale) ?: ""
+                    proteinText = formatNumber(proteinPer100 * scale) ?: ""
+                    carbsText = formatNumber(carbsPer100 * scale) ?: ""
+                    fatText = formatNumber(fatPer100 * scale) ?: ""
+                    fiberText = formatNumber(fiberPer100 * scale) ?: ""
+                    sugarText = formatNumber(sugarPer100 * scale) ?: ""
+                    saltText = formatNumber(saltPer100 * scale) ?: ""
+                }
             }
         }
     }
@@ -233,7 +359,7 @@ fun EditFoodDialog(
                 FoodFormUnitOption("0000000000000001", baseUnitTitle, 1.0)
             )
             selectedUnit = unitOptions.first()
-            amountText = "1"
+            amountText = parsedInitAmount.ifBlank { "1" }
             energyPer100 = NutrientParser.parseNutrient(food.energy)
             proteinPer100 = NutrientParser.parseNutrient(food.protein)
             carbsPer100 = NutrientParser.parseNutrient(food.carbohydrate)
@@ -241,6 +367,15 @@ fun EditFoodDialog(
             fiberPer100 = NutrientParser.parseNutrient(food.fiber)
             sugarPer100 = NutrientParser.parseNutrient(food.sugar)
             saltPer100 = NutrientParser.parseNutrient(food.salt)
+            if (!hasCustomizedMacros) {
+                energyText = formatNumber(energyPer100) ?: ""
+                proteinText = formatNumber(proteinPer100) ?: ""
+                carbsText = formatNumber(carbsPer100) ?: ""
+                fatText = formatNumber(fatPer100) ?: ""
+                fiberText = formatNumber(fiberPer100) ?: ""
+                sugarText = formatNumber(sugarPer100) ?: ""
+                saltText = formatNumber(saltPer100) ?: ""
+            }
             isLoadingOptions = false
             return@LaunchedEffect
         }
@@ -332,61 +467,17 @@ fun EditFoodDialog(
         } else null
     }
 
-    val previewKcal = when {
-        currentMealPortion != null -> currentMealPortion.kcal.toInt()
-        else -> (energyPer100 * scaleFactor).toInt()
-    }
-    val previewProt = when {
-        currentMealPortion != null && currentMealPortion.protein > 0 -> currentMealPortion.protein
-        currentMealPortion != null && NutrientParser.parseNutrient(food.energy) > 0 -> {
-            val ratio = currentMealPortion.kcal / NutrientParser.parseNutrient(food.energy)
-            NutrientParser.parseNutrient(food.protein) * ratio
+    LaunchedEffect(currentMealPortion) {
+        if (!hasCustomizedMacros && currentMealPortion != null) {
+            energyText = formatNumber(currentMealPortion.kcal) ?: ""
+            proteinText = formatNumber(currentMealPortion.protein) ?: ""
+            carbsText = formatNumber(currentMealPortion.carbs) ?: ""
+            fatText = formatNumber(currentMealPortion.fat) ?: ""
+            fiberText = formatNumber(currentMealPortion.fiber) ?: ""
+            val ratio = if (NutrientParser.parseNutrient(food.energy) > 0) currentMealPortion.kcal / NutrientParser.parseNutrient(food.energy) else 1.0
+            sugarText = formatNumber(NutrientParser.parseNutrient(food.sugar) * ratio) ?: ""
+            saltText = formatNumber(NutrientParser.parseNutrient(food.salt) * ratio) ?: ""
         }
-        currentMealPortion != null -> 0.0
-        else -> (proteinPer100 * scaleFactor)
-    }
-    val previewCarbs = when {
-        currentMealPortion != null && currentMealPortion.carbs > 0 -> currentMealPortion.carbs
-        currentMealPortion != null && NutrientParser.parseNutrient(food.energy) > 0 -> {
-            val ratio = currentMealPortion.kcal / NutrientParser.parseNutrient(food.energy)
-            NutrientParser.parseNutrient(food.carbohydrate) * ratio
-        }
-        currentMealPortion != null -> 0.0
-        else -> (carbsPer100 * scaleFactor)
-    }
-    val previewFat = when {
-        currentMealPortion != null && currentMealPortion.fat > 0 -> currentMealPortion.fat
-        currentMealPortion != null && NutrientParser.parseNutrient(food.energy) > 0 -> {
-            val ratio = currentMealPortion.kcal / NutrientParser.parseNutrient(food.energy)
-            NutrientParser.parseNutrient(food.fat) * ratio
-        }
-        currentMealPortion != null -> 0.0
-        else -> (fatPer100 * scaleFactor)
-    }
-    val previewFiber = when {
-        currentMealPortion != null && currentMealPortion.fiber > 0 -> currentMealPortion.fiber
-        currentMealPortion != null && NutrientParser.parseNutrient(food.energy) > 0 -> {
-            val ratio = currentMealPortion.kcal / NutrientParser.parseNutrient(food.energy)
-            NutrientParser.parseNutrient(food.fiber) * ratio
-        }
-        currentMealPortion != null -> 0.0
-        else -> (fiberPer100 * scaleFactor)
-    }
-    val previewSugar = when {
-        currentMealPortion != null && NutrientParser.parseNutrient(food.energy) > 0 -> {
-            val ratio = currentMealPortion.kcal / NutrientParser.parseNutrient(food.energy)
-            NutrientParser.parseNutrient(food.sugar) * ratio
-        }
-        currentMealPortion != null -> 0.0
-        else -> (sugarPer100 * scaleFactor)
-    }
-    val previewSalt = when {
-        currentMealPortion != null && NutrientParser.parseNutrient(food.energy) > 0 -> {
-            val ratio = currentMealPortion.kcal / NutrientParser.parseNutrient(food.energy)
-            NutrientParser.parseNutrient(food.salt) * ratio
-        }
-        currentMealPortion != null -> 0.0
-        else -> (saltPer100 * scaleFactor)
     }
 
     AlertDialog(
@@ -446,7 +537,7 @@ fun EditFoodDialog(
                             )
                             OutlinedTextField(
                                 value = amountText,
-                                onValueChange = { amountText = it },
+                                onValueChange = { onFieldChange("amount", it) },
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                 modifier = Modifier.fillMaxWidth()
@@ -485,8 +576,21 @@ fun EditFoodDialog(
                                             onClick = {
                                                 selectedUnit = opt
                                                 unitExpanded = false
+                                                activeEditingField = null
                                                 if (personalMealForm != null) {
                                                     amountText = formatAmount(personalMealForm!!.suggestedAmount(opt))
+                                                } else if (!hasCustomizedMacros) {
+                                                    val mult = opt.multiplier ?: 1.0
+                                                    val amt = amountText.replace(',', '.').toDoubleOrNull() ?: 1.0
+                                                    val effGrams = amt * mult
+                                                    val scale = if (isCustomFood) effGrams else (effGrams / 100.0)
+                                                    energyText = formatNumber(energyPer100 * scale) ?: ""
+                                                    proteinText = formatNumber(proteinPer100 * scale) ?: ""
+                                                    carbsText = formatNumber(carbsPer100 * scale) ?: ""
+                                                    fatText = formatNumber(fatPer100 * scale) ?: ""
+                                                    fiberText = formatNumber(fiberPer100 * scale) ?: ""
+                                                    sugarText = formatNumber(sugarPer100 * scale) ?: ""
+                                                    saltText = formatNumber(saltPer100 * scale) ?: ""
                                                 }
                                             }
                                         )
@@ -588,36 +692,137 @@ fun EditFoodDialog(
                         }
                     }
 
-                    // Nutrition Preview Card
+                    // Nutrition Card
                     Card(
                         colors = CardDefaults.cardColors(containerColor = Color(0xFF262626)),
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column(modifier = Modifier.padding(10.dp)) {
+                        Column(
+                            modifier = Modifier.padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(strings.portionTotal.substringBefore("|").trim(), fontSize = 12.sp, color = Color.LightGray)
                                 Text(
-                                    text = "$previewKcal ${strings.kcalUnit}",
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFFFFD54F)
+                                    text = strings.portionTotal.substringBefore("|").trim(),
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color.LightGray
                                 )
+                                IconButton(
+                                    onClick = {
+                                        isLinked = !isLinked
+                                        activeEditingField = null
+                                    },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (isLinked) Icons.Default.Link else Icons.Default.LinkOff,
+                                        contentDescription = if (isLinked) strings.proportionalLinked else strings.proportionalUnlinked,
+                                        tint = if (isLinked) MaterialTheme.colorScheme.primary else Color(0xFFAAAAAA),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
                             }
-                            Spacer(modifier = Modifier.height(4.dp))
+
+                            // Energy (kcal)
+                            OutlinedTextField(
+                                value = energyText,
+                                onValueChange = { onFieldChange("energy", it) },
+                                label = { Text("${strings.energy} (${strings.kcalUnit})") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            // Protein, Carbs, Fat Row
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedTextField(
+                                    value = proteinText,
+                                    onValueChange = { onFieldChange("protein", it) },
+                                    label = { Text("${strings.proteinShort} (g)") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                    singleLine = true,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                OutlinedTextField(
+                                    value = carbsText,
+                                    onValueChange = { onFieldChange("carbs", it) },
+                                    label = { Text("${strings.carbsShort} (g)") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                    singleLine = true,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                OutlinedTextField(
+                                    value = fatText,
+                                    onValueChange = { onFieldChange("fat", it) },
+                                    label = { Text("${strings.fatShort} (g)") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                    singleLine = true,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+
+                            // Fiber
+                            OutlinedTextField(
+                                value = fiberText,
+                                onValueChange = { onFieldChange("fiber", it) },
+                                label = { Text("${strings.fiberShort} (g)") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            // More details expander (Sugar, Salt)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { showMoreDetails = !showMoreDetails }
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text("${strings.proteinShort}: ${String.format(Locale.US, "%.1f", previewProt)} g", fontSize = 11.sp, color = Color(0xFFE57373))
-                                Text("${strings.fatShort}: ${String.format(Locale.US, "%.1f", previewFat)} g", fontSize = 11.sp, color = Color(0xFFFFD54F))
-                                Text("${strings.carbsShort}: ${String.format(Locale.US, "%.1f", previewCarbs)} g", fontSize = 11.sp, color = Color(0xFF64B5F6))
-                                if (previewFiber > 0.1) {
-                                    Text("${strings.fiberShort}: ${String.format(Locale.US, "%.1f", previewFiber)} g", fontSize = 11.sp, color = Color(0xFFAED581))
+                                Text(
+                                    strings.moreDetails,
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Icon(
+                                    imageVector = if (showMoreDetails) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+
+                            AnimatedVisibility(visible = showMoreDetails) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedTextField(
+                                        value = sugarText,
+                                        onValueChange = { onFieldChange("sugar", it) },
+                                        label = { Text("${strings.sugar} (g)") },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                        singleLine = true,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    OutlinedTextField(
+                                        value = saltText,
+                                        onValueChange = { onFieldChange("salt", it) },
+                                        label = { Text("${strings.salt} (g)") },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                        singleLine = true,
+                                        modifier = Modifier.weight(1f)
+                                    )
                                 }
                             }
                         }
@@ -637,7 +842,8 @@ fun EditFoodDialog(
                         errorMsg = strings.idNotFoundError
                         return@Button
                     }
-                    if (!isCustomFood && personalMealForm == null && productGuid.isBlank()) {
+                    val shouldSaveAsCustom = isCustomFood || hasCustomizedMacros
+                    if (!isCustomFood && !hasCustomizedMacros && personalMealForm == null && productGuid.isBlank()) {
                         errorMsg = strings.idNotFoundError
                         return@Button
                     }
@@ -646,7 +852,7 @@ fun EditFoodDialog(
                     errorMsg = null
 
                     coroutineScope.launch {
-                        if (personalMealForm != null && currentMealPortion != null) {
+                        if (personalMealForm != null && currentMealPortion != null && !hasCustomizedMacros) {
                             if (isClone) {
                                 viewModel.addPersonalMeal(currentMealPortion.request) { success ->
                                     isSubmitting = false
@@ -672,23 +878,24 @@ fun EditFoodDialog(
                             return@launch
                         }
 
-                        if (isCustomFood) {
+                        if (shouldSaveAsCustom) {
                             val scale = finalAmount * (selectedUnit?.multiplier ?: 1.0)
+                            val waterScale = if (isCustomFood) scale else (scale / 100.0)
                             val customRequest = AddCustomFoodRequest(
                                 guid = "0",
                                 title = title,
                                 diaryTimeGuid = selectedTimeGuid,
                                 date = targetDate.format(formatter),
-                                energy = formatDouble(previewKcal.toDouble()) ?: "0",
+                                energy = formatDouble(energyText.replace(',', '.').toDoubleOrNull()) ?: "0",
                                 energyUnit = "kcal",
                                 detailValues = true,
-                                protein = formatDouble(previewProt) ?: "0",
-                                carbohydrate = formatDouble(previewCarbs) ?: "0",
-                                fat = formatDouble(previewFat) ?: "0",
-                                fiber = formatDouble(previewFiber),
-                                sugar = formatDouble(previewSugar),
-                                salt = formatDouble(previewSalt),
-                                water = formatDouble(NutrientParser.parseNutrient(food.water) * scale)
+                                protein = formatDouble(proteinText.replace(',', '.').toDoubleOrNull()) ?: "0",
+                                carbohydrate = formatDouble(carbsText.replace(',', '.').toDoubleOrNull()) ?: "0",
+                                fat = formatDouble(fatText.replace(',', '.').toDoubleOrNull()) ?: "0",
+                                fiber = formatDouble(fiberText.replace(',', '.').toDoubleOrNull()),
+                                sugar = formatDouble(sugarText.replace(',', '.').toDoubleOrNull()),
+                                salt = formatDouble(saltText.replace(',', '.').toDoubleOrNull()),
+                                water = formatDouble(NutrientParser.parseNutrient(food.water) * waterScale)
                             )
                             if (isClone) {
                                 viewModel.addCustomFood(customRequest) { success ->
