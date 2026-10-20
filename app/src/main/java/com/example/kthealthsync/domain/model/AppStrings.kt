@@ -121,6 +121,8 @@ data class AppStrings(
     val customFoodAiPromptHint: String,
     val customFoodAiFill: String,
     val customFoodAiError: String,
+    val proportionalLinked: String,
+    val proportionalUnlinked: String,
 
     // Settings
     val settingsTitle: String,
@@ -253,6 +255,8 @@ val RuStrings = AppStrings(
     customFoodAiPromptHint = "Например: Батончик 60г, 200 ккал, 20г белка, 5г жиров, 15г углей",
     customFoodAiFill = "Распознать с помощью Nano",
     customFoodAiError = "Не удалось распознать данные из текста",
+    proportionalLinked = "Связано",
+    proportionalUnlinked = "Раздельно",
 
     settingsTitle = "Настройки",
     appLanguageLabel = "Язык интерфейса",
@@ -382,6 +386,8 @@ val CsStrings = AppStrings(
     customFoodAiPromptHint = "Např.: Tyčinka 60g, 200 kcal, 20g bílkovin, 5g tuků, 15g sacharidů",
     customFoodAiFill = "Rozpoznat pomocí Nano",
     customFoodAiError = "Nepodařilo se rozpoznat data z textu",
+    proportionalLinked = "Propojeno",
+    proportionalUnlinked = "Odděleně",
 
     settingsTitle = "Nastavení",
     appLanguageLabel = "Jazyk rozhraní",
@@ -511,6 +517,8 @@ val EnStrings = AppStrings(
     customFoodAiPromptHint = "e.g.: Bar 60g, 200 kcal, 20g protein, 5g fat, 15g carbs",
     customFoodAiFill = "Parse with Nano",
     customFoodAiError = "Could not parse data from text",
+    proportionalLinked = "Linked",
+    proportionalUnlinked = "Separate",
 
     settingsTitle = "Settings",
     appLanguageLabel = "App Language",

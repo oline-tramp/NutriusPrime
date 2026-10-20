@@ -22,6 +22,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.kthealthsync.AddCustomFoodRequest
 import com.example.kthealthsync.AddFoodRequest
 import com.example.kthealthsync.FoodFormUnitOption
 import com.example.kthealthsync.Foodstuff
@@ -50,6 +51,11 @@ private fun formatAmount(value: Double): String {
         return round(rounded).toInt().toString()
     }
     return String.format(Locale.US, "%.2f", rounded).trimEnd('0').trimEnd('.')
+}
+
+private fun formatDouble(d: Double?): String? {
+    if (d == null || d <= 0.0) return null
+    return formatAmount(d)
 }
 
 private val MULT_MATCH_REGEX = "^([\\d.]+)\\s*x\\s*([\\d.]+)?\\s*(.*)$".toRegex()
@@ -184,6 +190,7 @@ fun EditFoodDialog(
 
     val recipeGuid = rawCandidateGuid
     val productGuid = rawCandidateGuid
+    val isCustomFood = !isPersonalMealCandidate && (rawCandidateGuid.isBlank() || rawCandidateGuid == "0") && food.url.isNullOrBlank()
 
     var personalMealForm by remember { mutableStateOf<PersonalMealForm?>(null) }
 
@@ -220,6 +227,24 @@ fun EditFoodDialog(
     }
 
     LaunchedEffect(food) {
+        if (isCustomFood) {
+            val baseUnitTitle = if (!parsedInitUnit.isNullOrBlank()) parsedInitUnit else "1 porce"
+            unitOptions = listOf(
+                FoodFormUnitOption("0000000000000001", baseUnitTitle, 1.0)
+            )
+            selectedUnit = unitOptions.first()
+            amountText = "1"
+            energyPer100 = NutrientParser.parseNutrient(food.energy)
+            proteinPer100 = NutrientParser.parseNutrient(food.protein)
+            carbsPer100 = NutrientParser.parseNutrient(food.carbohydrate)
+            fatPer100 = NutrientParser.parseNutrient(food.fat)
+            fiberPer100 = NutrientParser.parseNutrient(food.fiber)
+            sugarPer100 = NutrientParser.parseNutrient(food.sugar)
+            saltPer100 = NutrientParser.parseNutrient(food.salt)
+            isLoadingOptions = false
+            return@LaunchedEffect
+        }
+
         val candidateGuid = rawCandidateGuid
 
         if (candidateGuid.isNotBlank() || isPersonalMealCandidate) {
@@ -288,7 +313,11 @@ fun EditFoodDialog(
     val currentAmountVal = amountText.replace(",", ".").toDoubleOrNull() ?: 0.0
     val currentMultiplier = selectedUnit?.multiplier ?: 1.0
     val totalEffectiveGrams = currentAmountVal * currentMultiplier
-    val scaleFactor = totalEffectiveGrams / 100.0
+    val scaleFactor = if (isCustomFood) {
+        currentAmountVal * currentMultiplier
+    } else {
+        totalEffectiveGrams / 100.0
+    }
 
     val currentMealPortion = remember(personalMealForm, selectedUnit, currentAmountVal, targetDate, selectedTimeGuid) {
         if (personalMealForm != null && selectedUnit != null && currentAmountVal > 0) {
@@ -342,6 +371,22 @@ fun EditFoodDialog(
         }
         currentMealPortion != null -> 0.0
         else -> (fiberPer100 * scaleFactor)
+    }
+    val previewSugar = when {
+        currentMealPortion != null && NutrientParser.parseNutrient(food.energy) > 0 -> {
+            val ratio = currentMealPortion.kcal / NutrientParser.parseNutrient(food.energy)
+            NutrientParser.parseNutrient(food.sugar) * ratio
+        }
+        currentMealPortion != null -> 0.0
+        else -> (sugarPer100 * scaleFactor)
+    }
+    val previewSalt = when {
+        currentMealPortion != null && NutrientParser.parseNutrient(food.energy) > 0 -> {
+            val ratio = currentMealPortion.kcal / NutrientParser.parseNutrient(food.energy)
+            NutrientParser.parseNutrient(food.salt) * ratio
+        }
+        currentMealPortion != null -> 0.0
+        else -> (saltPer100 * scaleFactor)
     }
 
     AlertDialog(
@@ -592,7 +637,7 @@ fun EditFoodDialog(
                         errorMsg = strings.idNotFoundError
                         return@Button
                     }
-                    if (personalMealForm == null && productGuid.isBlank()) {
+                    if (!isCustomFood && personalMealForm == null && productGuid.isBlank()) {
                         errorMsg = strings.idNotFoundError
                         return@Button
                     }
@@ -615,6 +660,45 @@ fun EditFoodDialog(
                                 viewModel.editPersonalMealEntry(
                                     oldEntryId = food.id ?: "",
                                     request = currentMealPortion.request
+                                ) { result ->
+                                    isSubmitting = false
+                                    when (result) {
+                                        DiaryEditResult.SUCCESS -> onSuccess()
+                                        DiaryEditResult.ADD_FAILED -> errorMsg = strings.saveError
+                                        DiaryEditResult.DELETE_FAILED -> needsOldEntryRemoval = true
+                                    }
+                                }
+                            }
+                            return@launch
+                        }
+
+                        if (isCustomFood) {
+                            val scale = finalAmount * (selectedUnit?.multiplier ?: 1.0)
+                            val customRequest = AddCustomFoodRequest(
+                                guid = "0",
+                                title = title,
+                                diaryTimeGuid = selectedTimeGuid,
+                                date = targetDate.format(formatter),
+                                energy = formatDouble(previewKcal.toDouble()) ?: "0",
+                                energyUnit = "kcal",
+                                detailValues = true,
+                                protein = formatDouble(previewProt) ?: "0",
+                                carbohydrate = formatDouble(previewCarbs) ?: "0",
+                                fat = formatDouble(previewFat) ?: "0",
+                                fiber = formatDouble(previewFiber),
+                                sugar = formatDouble(previewSugar),
+                                salt = formatDouble(previewSalt),
+                                water = formatDouble(NutrientParser.parseNutrient(food.water) * scale)
+                            )
+                            if (isClone) {
+                                viewModel.addCustomFood(customRequest) { success ->
+                                    isSubmitting = false
+                                    if (success) onSuccess() else errorMsg = strings.cloneError
+                                }
+                            } else {
+                                viewModel.editCustomFoodEntry(
+                                    oldEntryId = food.id ?: "",
+                                    request = customRequest
                                 ) { result ->
                                     isSubmitting = false
                                     when (result) {

@@ -11,6 +11,8 @@ import androidx.compose.material.icons.filled.AddCircleOutline
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.LinkOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -77,6 +79,85 @@ fun CreateCustomFoodDialog(
     var aiPrompt by remember { mutableStateOf(initialTitle.ifBlank { "" }) }
     var isAiParsing by remember { mutableStateOf(false) }
     var aiError by remember { mutableStateOf<String?>(null) }
+
+    var isLinked by remember { mutableStateOf(false) }
+    var activeEditingField by remember { mutableStateOf<String?>(null) }
+    var baseEnergy by remember { mutableStateOf<Double?>(null) }
+    var baseProtein by remember { mutableStateOf<Double?>(null) }
+    var baseCarbs by remember { mutableStateOf<Double?>(null) }
+    var baseFat by remember { mutableStateOf<Double?>(null) }
+    var baseFiber by remember { mutableStateOf<Double?>(null) }
+    var baseSugar by remember { mutableStateOf<Double?>(null) }
+    var baseSatFat by remember { mutableStateOf<Double?>(null) }
+    var baseSalt by remember { mutableStateOf<Double?>(null) }
+
+    fun captureBaseline(field: String) {
+        activeEditingField = field
+        baseEnergy = energyText.replace(',', '.').trim().toDoubleOrNull()
+        baseProtein = proteinText.replace(',', '.').trim().toDoubleOrNull()
+        baseCarbs = carbsText.replace(',', '.').trim().toDoubleOrNull()
+        baseFat = fatText.replace(',', '.').trim().toDoubleOrNull()
+        baseFiber = fiberText.replace(',', '.').trim().toDoubleOrNull()
+        baseSugar = sugarText.replace(',', '.').trim().toDoubleOrNull()
+        baseSatFat = satFatText.replace(',', '.').trim().toDoubleOrNull()
+        baseSalt = saltText.replace(',', '.').trim().toDoubleOrNull()
+    }
+
+    fun onMacroFieldChange(field: String, newText: String) {
+        if (!isLinked) {
+            when (field) {
+                "energy" -> energyText = newText
+                "protein" -> proteinText = newText
+                "carbs" -> carbsText = newText
+                "fat" -> fatText = newText
+                "fiber" -> fiberText = newText
+                "sugar" -> sugarText = newText
+                "satFat" -> satFatText = newText
+                "salt" -> saltText = newText
+            }
+            return
+        }
+
+        if (activeEditingField != field) {
+            captureBaseline(field)
+        }
+
+        when (field) {
+            "energy" -> energyText = newText
+            "protein" -> proteinText = newText
+            "carbs" -> carbsText = newText
+            "fat" -> fatText = newText
+            "fiber" -> fiberText = newText
+            "sugar" -> sugarText = newText
+            "satFat" -> satFatText = newText
+            "salt" -> saltText = newText
+        }
+
+        val newNum = newText.replace(',', '.').trim().toDoubleOrNull()
+        val baseNum = when (field) {
+            "energy" -> baseEnergy
+            "protein" -> baseProtein
+            "carbs" -> baseCarbs
+            "fat" -> baseFat
+            "fiber" -> baseFiber
+            "sugar" -> baseSugar
+            "satFat" -> baseSatFat
+            "salt" -> baseSalt
+            else -> null
+        }
+
+        if (newNum != null && newNum >= 0.0 && baseNum != null && baseNum > 0.0) {
+            val ratio = newNum / baseNum
+            if (field != "energy") baseEnergy?.let { energyText = formatNumber(it * ratio) ?: "" }
+            if (field != "protein") baseProtein?.let { proteinText = formatNumber(it * ratio) ?: "" }
+            if (field != "carbs") baseCarbs?.let { carbsText = formatNumber(it * ratio) ?: "" }
+            if (field != "fat") baseFat?.let { fatText = formatNumber(it * ratio) ?: "" }
+            if (field != "fiber") baseFiber?.let { fiberText = formatNumber(it * ratio) ?: "" }
+            if (field != "sugar") baseSugar?.let { sugarText = formatNumber(it * ratio) ?: "" }
+            if (field != "satFat") baseSatFat?.let { satFatText = formatNumber(it * ratio) ?: "" }
+            if (field != "salt") baseSalt?.let { saltText = formatNumber(it * ratio) ?: "" }
+        }
+    }
 
     val energyVal = energyText.replace(',', '.').trim().toDoubleOrNull()
     val proteinVal = proteinText.replace(',', '.').trim().toDoubleOrNull()
@@ -186,6 +267,7 @@ fun CreateCustomFoodDialog(
                                                                 saltText = formatNumber(parsed.salt) ?: ""
                                                                 showMoreDetails = true
                                                             }
+                                                            activeEditingField = null
                                                         } else {
                                                             aiError = strings.customFoodAiError
                                                         }
@@ -268,18 +350,51 @@ fun CreateCustomFoodDialog(
                     }
                 }
 
-                // Section header / note
-                Text(
-                    strings.customFoodPortionNote,
-                    fontSize = 13.sp,
-                    color = Color.LightGray,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
+                // Section header / note with proportional lock icon
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        strings.customFoodPortionNote,
+                        fontSize = 13.sp,
+                        color = Color.LightGray,
+                        modifier = Modifier.weight(1f)
+                    )
+                    FilterChip(
+                        selected = isLinked,
+                        onClick = {
+                            isLinked = !isLinked
+                            activeEditingField = null
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = if (isLinked) Icons.Default.Link else Icons.Default.LinkOff,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        },
+                        label = {
+                            Text(
+                                if (isLinked) strings.proportionalLinked else strings.proportionalUnlinked,
+                                fontSize = 11.sp
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            selectedLeadingIconColor = MaterialTheme.colorScheme.primary
+                        )
+                    )
+                }
 
                 // Energy (kcal)
                 OutlinedTextField(
                     value = energyText,
-                    onValueChange = { energyText = it },
+                    onValueChange = { onMacroFieldChange("energy", it) },
                     label = { Text("${strings.energy} (${strings.kcalUnit}) *") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
@@ -293,7 +408,7 @@ fun CreateCustomFoodDialog(
                 ) {
                     OutlinedTextField(
                         value = proteinText,
-                        onValueChange = { proteinText = it },
+                        onValueChange = { onMacroFieldChange("protein", it) },
                         label = { Text("${strings.proteinShort} (g) *") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         singleLine = true,
@@ -301,7 +416,7 @@ fun CreateCustomFoodDialog(
                     )
                     OutlinedTextField(
                         value = carbsText,
-                        onValueChange = { carbsText = it },
+                        onValueChange = { onMacroFieldChange("carbs", it) },
                         label = { Text("${strings.carbsShort} (g) *") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         singleLine = true,
@@ -309,7 +424,7 @@ fun CreateCustomFoodDialog(
                     )
                     OutlinedTextField(
                         value = fatText,
-                        onValueChange = { fatText = it },
+                        onValueChange = { onMacroFieldChange("fat", it) },
                         label = { Text("${strings.fatShort} (g) *") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         singleLine = true,
@@ -349,7 +464,7 @@ fun CreateCustomFoodDialog(
                         ) {
                             OutlinedTextField(
                                 value = fiberText,
-                                onValueChange = { fiberText = it },
+                                onValueChange = { onMacroFieldChange("fiber", it) },
                                 label = { Text("${strings.fiberShort} (g)") },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                 singleLine = true,
@@ -357,7 +472,7 @@ fun CreateCustomFoodDialog(
                             )
                             OutlinedTextField(
                                 value = sugarText,
-                                onValueChange = { sugarText = it },
+                                onValueChange = { onMacroFieldChange("sugar", it) },
                                 label = { Text("${strings.sugar} (g)") },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                 singleLine = true,
@@ -371,7 +486,7 @@ fun CreateCustomFoodDialog(
                         ) {
                             OutlinedTextField(
                                 value = satFatText,
-                                onValueChange = { satFatText = it },
+                                onValueChange = { onMacroFieldChange("satFat", it) },
                                 label = { Text("${strings.saturatedFatShort} (g)") },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                 singleLine = true,
@@ -379,7 +494,7 @@ fun CreateCustomFoodDialog(
                             )
                             OutlinedTextField(
                                 value = saltText,
-                                onValueChange = { saltText = it },
+                                onValueChange = { onMacroFieldChange("salt", it) },
                                 label = { Text("${strings.salt} (g)") },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                 singleLine = true,

@@ -313,6 +313,74 @@ class KalorickeRepositoryTest {
         assertEquals(listOf("addCustomFood"), calls)
     }
 
+    @Test fun editCustomFoodEntryAddsReplacementThenDeletesOldEntry() = runTest {
+        val customRequest = AddCustomFoodRequest(
+            guid = "0",
+            title = "Test Food",
+            diaryTimeGuid = "2",
+            date = "19.10.2026",
+            energy = "250",
+            protein = "20",
+            carbohydrate = "30",
+            fat = "5"
+        )
+        val repo = repository { method, args ->
+            when (method) {
+                "addCustomFood" -> AddFoodResponse(0, null)
+                "deleteFoodstuffDiary" -> {
+                    assertEquals("custom-old-id", args[0])
+                    DiaryActionResponse(0, null)
+                }
+                else -> error(method)
+            }
+        }
+        assertEquals(DiaryEditResult.SUCCESS, repo.editCustomFoodEntry("custom-old-id", customRequest))
+        assertEquals(listOf("addCustomFood", "deleteFoodstuffDiary"), calls)
+    }
+
+    @Test fun editCustomFoodEntryFailedAddNeverDeletesOldEntry() = runTest {
+        val customRequest = AddCustomFoodRequest(
+            guid = "0",
+            title = "Test Food",
+            diaryTimeGuid = "2",
+            date = "19.10.2026",
+            energy = "250",
+            protein = "20",
+            carbohydrate = "30",
+            fat = "5"
+        )
+        val repo = repository { method, _ ->
+            when (method) {
+                "addCustomFood" -> AddFoodResponse(5, "Error")
+                else -> error(method)
+            }
+        }
+        assertEquals(DiaryEditResult.ADD_FAILED, repo.editCustomFoodEntry("custom-old-id", customRequest))
+        assertEquals(listOf("addCustomFood"), calls)
+    }
+
+    @Test fun editCustomFoodEntryFailedDeleteReportsDeleteFailed() = runTest {
+        val customRequest = AddCustomFoodRequest(
+            guid = "0",
+            title = "Test Food",
+            diaryTimeGuid = "2",
+            date = "19.10.2026",
+            energy = "250",
+            protein = "20",
+            carbohydrate = "30",
+            fat = "5"
+        )
+        val repo = repository { method, _ ->
+            when (method) {
+                "addCustomFood" -> AddFoodResponse(0, null)
+                "deleteFoodstuffDiary" -> DiaryActionResponse(9, "Failed to delete")
+                else -> error(method)
+            }
+        }
+        assertEquals(DiaryEditResult.DELETE_FAILED, repo.editCustomFoodEntry("custom-old-id", customRequest))
+        assertEquals(listOf("addCustomFood", "deleteFoodstuffDiary"), calls)
+    }
+
     private class MemoryPreferences : RepositoryPreferences {
         override val cookieFlow = MutableStateFlow("JSESSIONID=test")
         override val emailFlow = MutableStateFlow("")

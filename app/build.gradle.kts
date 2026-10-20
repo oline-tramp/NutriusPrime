@@ -12,8 +12,8 @@ android {
         applicationId = "com.example.kthealthsync"
         minSdk = 26
         targetSdk = 34
-        versionCode = 65
-        versionName = "2.33"
+        versionCode = 66
+        versionName = "2.34"
     }
 
     buildTypes {

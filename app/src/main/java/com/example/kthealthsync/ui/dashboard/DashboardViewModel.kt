@@ -4,6 +4,7 @@ import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.kthealthsync.AddCustomFoodRequest
 import com.example.kthealthsync.AddFoodRequest
 import com.example.kthealthsync.DebugLogger
 import com.example.kthealthsync.DiaryResponse
@@ -398,6 +399,32 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             else mealMap[name] ?: candidate
     }
 
+    fun isCustomFood(food: Foodstuff): Boolean {
+        if (food.isRecipe == true || !food.components.isNullOrEmpty() || !food.guidRecipe.isNullOrBlank() ||
+            food.type == "meal" || food.guidType == "meal") return false
+        val guid = food.guidRecipe?.takeIf { it.isNotBlank() }
+            ?: (if (food.guidType != "meal") food.guidType else null)?.takeIf { it.isNotBlank() }
+            ?: (if (food.guid != "meal") food.guid else null)?.takeIf { it.isNotBlank() }
+        return guid == null || guid == "0" || (guid.isBlank() && food.url.isNullOrBlank())
+    }
+
+    fun editCustomFoodEntry(oldEntryId: String, request: AddCustomFoodRequest, onResult: (DiaryEditResult) -> Unit) {
+        viewModelScope.launch {
+            val result = repository.editCustomFoodEntry(oldEntryId, request)
+            loadDailyData(silent = true)
+            onResult(result)
+        }
+    }
+
+    fun addCustomFood(request: AddCustomFoodRequest, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val resp = repository.addCustomFood(request)
+            val success = resp.code == 0
+            loadDailyData(silent = true)
+            onResult(success)
+        }
+    }
+
     fun cloneEntries(
         foods: List<Foodstuff>,
         targetTimeId: String,
@@ -483,6 +510,28 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                                 Log.w("NutriusPrime", "Failed to clone as personal meal, trying standard food: ${e.message}")
                             }
                         }
+                    } else if (isCustomFood(food)) {
+                        val request = AddCustomFoodRequest(
+                            guid = "0",
+                            title = food.title ?: food.name ?: food.nazev ?: "",
+                            diaryTimeGuid = targetTimeId,
+                            date = dateToUse,
+                            energy = food.energy ?: "0",
+                            energyUnit = "kcal",
+                            detailValues = true,
+                            protein = food.protein ?: "0",
+                            carbohydrate = food.carbohydrate ?: "0",
+                            fat = food.fat ?: "0",
+                            fiber = food.fiber,
+                            sugar = food.sugar,
+                            salt = food.salt,
+                            water = food.water
+                        )
+                        val resp = repository.addCustomFood(request)
+                        if (resp.code != 0 && resp.code != null) {
+                            allSuccess = false
+                        }
+                        continue
                     }
 
                     val guid = (if (food.guidType != "meal") food.guidType else null)?.takeIf { it.isNotBlank() }

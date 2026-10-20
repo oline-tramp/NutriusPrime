@@ -612,6 +612,17 @@ class KalorickeRepository(
         }
     }
 
+    suspend fun editCustomFoodEntry(oldEntryId: String, request: AddCustomFoodRequest): DiaryEditResult {
+        require(oldEntryId.isNotBlank()) { "Missing diary entry ID" }
+        val response = addCustomFood(request)
+        if (response.code != 0) return DiaryEditResult.ADD_FAILED
+        return if (deleteDiaryEntries(setOf(oldEntryId)).isSuccess) {
+            DiaryEditResult.SUCCESS
+        } else {
+            DiaryEditResult.DELETE_FAILED
+        }
+    }
+
     suspend fun deleteDiaryEntries(ids: Collection<String>): Result<Unit> {
         val validIds = ids.filter { it.isNotBlank() }
         if (validIds.isEmpty()) return Result.success(Unit)
