@@ -20,19 +20,25 @@ import java.util.Locale
 
 object DailyNotificationHelper {
 
-    const val CHANNEL_ID = "daily_progress_channel"
+    const val CHANNEL_ID = "daily_progress_channel_v2"
+    private const val OLD_CHANNEL_ID = "daily_progress_channel"
     const val NOTIFICATION_ID = 1001
 
     fun createNotificationChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            try {
+                notificationManager.deleteNotificationChannel(OLD_CHANNEL_ID)
+            } catch (_: Exception) {
+            }
+
             val name = "Дневной прогресс"
             val descriptionText = "Закреплённое уведомление с прогрессом калорий и БЖУ"
-            val importance = NotificationManager.IMPORTANCE_LOW
+            val importance = NotificationManager.IMPORTANCE_DEFAULT
             val channel = NotificationChannel(CHANNEL_ID, name, importance).apply {
                 description = descriptionText
                 setShowBadge(false)
             }
-            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.createNotificationChannel(channel)
         }
     }
@@ -218,6 +224,7 @@ object DailyNotificationHelper {
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setShowWhen(false)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
 
         notificationManager.notify(NOTIFICATION_ID, builder.build())
