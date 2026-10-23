@@ -312,14 +312,105 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    fun applyOptimisticFoodEdit(
+        oldEntryId: String,
+        targetTimeId: String,
+        targetDateStr: String?,
+        updatedFood: Foodstuff
+    ) {
+        val currentState = _uiState.value
+        if (currentState is DashboardUiState.Success && currentState.diaryResponse?.data?.times != null) {
+            val allTimes = currentState.diaryResponse.data.times
+            val oldFood = allTimes.flatMap { it.foodstuff ?: emptyList() }.firstOrNull { it.id == oldEntryId }
+            if (oldFood == null) return
+
+            val isDifferentDay = !targetDateStr.isNullOrBlank() &&
+                    targetDateStr != _selectedDate.value.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+
+            val updatedTimes = if (isDifferentDay) {
+                allTimes.map { mealTime ->
+                    val remaining = mealTime.foodstuff?.filterNot { it.id == oldEntryId }
+                    mealTime.copy(foodstuff = remaining)
+                }
+            } else {
+                allTimes.map { mealTime ->
+                    val hasOld = mealTime.foodstuff?.any { it.id == oldEntryId } == true
+                    if (mealTime.id == targetTimeId) {
+                        if (hasOld) {
+                            val newFoods = mealTime.foodstuff?.map {
+                                if (it.id == oldEntryId) updatedFood else it
+                            }
+                            mealTime.copy(foodstuff = newFoods)
+                        } else {
+                            val remaining = mealTime.foodstuff?.filterNot { it.id == oldEntryId } ?: emptyList()
+                            mealTime.copy(foodstuff = remaining + updatedFood)
+                        }
+                    } else {
+                        val remaining = mealTime.foodstuff?.filterNot { it.id == oldEntryId }
+                        mealTime.copy(foodstuff = remaining)
+                    }
+                }
+            }
+
+            val diffSummary = if (isDifferentDay) {
+                recalculateOptimisticSummary(currentState.summary, listOf(oldFood))
+            } else {
+                val oldKcal = NutrientParser.parseNutrient(oldFood.energy)
+                val newKcal = NutrientParser.parseNutrient(updatedFood.energy)
+                val oldProt = NutrientParser.parseNutrient(oldFood.protein)
+                val newProt = NutrientParser.parseNutrient(updatedFood.protein)
+                val oldFat = NutrientParser.parseNutrient(oldFood.fat)
+                val newFat = NutrientParser.parseNutrient(updatedFood.fat)
+                val oldCarb = NutrientParser.parseNutrient(oldFood.carbohydrate)
+                val newCarb = NutrientParser.parseNutrient(updatedFood.carbohydrate)
+                val oldSugar = NutrientParser.parseNutrient(oldFood.sugar)
+                val newSugar = NutrientParser.parseNutrient(updatedFood.sugar)
+                val oldSalt = NutrientParser.parseNutrient(oldFood.salt)
+                val newSalt = NutrientParser.parseNutrient(updatedFood.salt)
+                val oldFiber = NutrientParser.parseNutrient(oldFood.fiber)
+                val newFiber = NutrientParser.parseNutrient(updatedFood.fiber)
+                val oldWater = HydrationCalculator.parseLiquidVolumeMl(oldFood, repository.getFoodCategorySync(oldFood))
+                val newWater = HydrationCalculator.parseLiquidVolumeMl(updatedFood, repository.getFoodCategorySync(updatedFood))
+
+                currentState.summary.copy(
+                    kcal = (currentState.summary.kcal - oldKcal + newKcal).coerceAtLeast(0.0),
+                    protein = (currentState.summary.protein - oldProt + newProt).coerceAtLeast(0.0),
+                    fat = (currentState.summary.fat - oldFat + newFat).coerceAtLeast(0.0),
+                    carb = (currentState.summary.carb - oldCarb + newCarb).coerceAtLeast(0.0),
+                    sugar = (currentState.summary.sugar - oldSugar + newSugar).coerceAtLeast(0.0),
+                    salt = (currentState.summary.salt - oldSalt + newSalt).coerceAtLeast(0.0),
+                    fiber = (currentState.summary.fiber - oldFiber + newFiber).coerceAtLeast(0.0),
+                    water = (currentState.summary.water - oldWater + newWater).coerceAtLeast(0.0)
+                )
+            }
+
+            val updatedDiary = currentState.diaryResponse.copy(
+                data = currentState.diaryResponse.data.copy(times = updatedTimes)
+            )
+            _uiState.value = DashboardUiState.Success(diffSummary, updatedDiary)
+            updateNotificationIfToday(diffSummary)
+        }
+    }
+
     fun editFoodEntry(
         oldEntryId: String,
         request: AddFoodRequest,
+        currentMealTimeId: String? = null,
+        currentDate: String? = null,
+        updatedFood: Foodstuff? = null,
         onComplete: (DiaryEditResult) -> Unit
     ) {
+        if (updatedFood != null) {
+            applyOptimisticFoodEdit(
+                oldEntryId = oldEntryId,
+                targetTimeId = request.diaryTimeGuid,
+                targetDateStr = request.date,
+                updatedFood = updatedFood
+            )
+        }
         viewModelScope.launch {
             val result = try {
-                repository.editFoodEntry(oldEntryId, request)
+                repository.editFoodEntry(oldEntryId, request, currentMealTimeId, currentDate)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -360,8 +451,19 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     fun editPersonalMealEntry(
         oldEntryId: String,
         request: com.google.gson.JsonObject,
+        targetTimeId: String? = null,
+        targetDateStr: String? = null,
+        updatedFood: Foodstuff? = null,
         onComplete: (DiaryEditResult) -> Unit
     ) {
+        if (updatedFood != null && targetTimeId != null) {
+            applyOptimisticFoodEdit(
+                oldEntryId = oldEntryId,
+                targetTimeId = targetTimeId,
+                targetDateStr = targetDateStr,
+                updatedFood = updatedFood
+            )
+        }
         viewModelScope.launch {
             val result = try {
                 repository.editPersonalMealEntry(oldEntryId, request)
@@ -408,7 +510,20 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         return guid == null || guid == "0" || (guid.isBlank() && food.url.isNullOrBlank())
     }
 
-    fun editCustomFoodEntry(oldEntryId: String, request: AddCustomFoodRequest, onResult: (DiaryEditResult) -> Unit) {
+    fun editCustomFoodEntry(
+        oldEntryId: String,
+        request: AddCustomFoodRequest,
+        updatedFood: Foodstuff? = null,
+        onResult: (DiaryEditResult) -> Unit
+    ) {
+        if (updatedFood != null) {
+            applyOptimisticFoodEdit(
+                oldEntryId = oldEntryId,
+                targetTimeId = request.diaryTimeGuid,
+                targetDateStr = request.date,
+                updatedFood = updatedFood
+            )
+        }
         viewModelScope.launch {
             val result = repository.editCustomFoodEntry(oldEntryId, request)
             loadDailyData(silent = true)

@@ -601,8 +601,51 @@ class KalorickeRepository(
         }
     }
 
-    suspend fun editFoodEntry(oldEntryId: String, request: AddFoodRequest): DiaryEditResult {
+    suspend fun editFoodEntry(
+        oldEntryId: String,
+        request: AddFoodRequest,
+        currentMealTimeId: String? = null,
+        currentDate: String? = null
+    ): DiaryEditResult {
         require(oldEntryId.isNotBlank()) { "Missing diary entry ID" }
+        val multiplierNum = request.multiplier.replace(',', '.').toDoubleOrNull() ?: 1.0
+
+        val editUnitResp = try {
+            executeWithRetry(operationName = "editFoodstuffUnit") { cookieParam ->
+                api.editFoodstuffUnit(
+                    EditDiaryFoodstuffUnitRequest(
+                        diaryGuid = oldEntryId,
+                        multiplier = multiplierNum,
+                        unitGuid = request.unitGuid
+                    ),
+                    cookieParam
+                )
+            }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            DebugLogger.addActionLog("editFoodstuffUnit error: ${e.message}")
+            null
+        }
+
+        if (editUnitResp != null && (editUnitResp.code == 0 || editUnitResp.code == null)) {
+            DebugLogger.addActionLog("editFoodstuffUnit success for $oldEntryId (multiplier=$multiplierNum, unit=${request.unitGuid})")
+            if ((currentMealTimeId != null && request.diaryTimeGuid != currentMealTimeId) ||
+                (currentDate != null && request.date != currentDate)) {
+                try {
+                    val moveResp = executeWithRetry(operationName = "moveFoodstuffDiary") { cookieParam ->
+                        api.moveFoodstuffDiary(oldEntryId, request.diaryTimeGuid, request.date, cookieParam)
+                    }
+                    DebugLogger.addActionLog("Moved edited entry $oldEntryId to time=${request.diaryTimeGuid}, date=${request.date} (code=${moveResp.code})")
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    DebugLogger.addActionLog("Failed to move edited entry $oldEntryId: ${e.message}")
+                }
+            }
+            return DiaryEditResult.SUCCESS
+        }
+
+        // Fallback: if in-place edit was rejected by KT, fallback to add+delete replacement
+        DebugLogger.addActionLog("editFoodstuffUnit rejected or failed, falling back to add+delete replacement")
         val response = addFoodstuff(request)
         if (response.code != 0) return DiaryEditResult.ADD_FAILED
         return if (deleteDiaryEntries(setOf(oldEntryId)).isSuccess) {
@@ -632,7 +675,7 @@ class KalorickeRepository(
             val resp = executeWithRetry(operationName = "deleteFoodstuffDiary") { cookieParam ->
                 api.deleteFoodstuffDiary(joined, cookieParam)
             }
-            check(resp.code == 0) { resp.message ?: "Delete rejected (code=${resp.code})" }
+            check(resp.code == 0 || resp.code == null) { resp.message ?: "Delete rejected (code=${resp.code})" }
             DebugLogger.addActionLog("Deleted ${validIds.size} diary entries: $joined (code=${resp.code}, msg=${resp.message})")
             Result.success(Unit)
         } catch (e: Exception) {
@@ -657,7 +700,7 @@ class KalorickeRepository(
                 val resp = executeWithRetry(operationName = "moveFoodstuffDiary") { cookieParam ->
                     api.moveFoodstuffDiary(id, targetTimeId, dateParam, cookieParam)
                 }
-                check(resp.code == 0) { resp.message ?: "Move rejected (code=${resp.code})" }
+                check(resp.code == 0 || resp.code == null) { resp.message ?: "Move rejected (code=${resp.code})" }
                 DebugLogger.addActionLog("Moved diary entry $id to time=$targetTimeId, date=$dateParam (code=${resp.code})")
             }
             Result.success(Unit)

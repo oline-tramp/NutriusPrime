@@ -56,9 +56,44 @@ class KalorickeRepositoryTest {
         return KalorickeRepository(api, prefs)
     }
 
-    @Test fun successfulEditAddsReplacementThenDeletesOldEntry() = runTest {
+    @Test fun successfulInPlaceEditModifiesUnitWithoutAddOrDelete() = runTest {
         val repo = repository { method, args ->
             when (method) {
+                "editFoodstuffUnit" -> {
+                    val req = args[0] as EditDiaryFoodstuffUnitRequest
+                    assertEquals("old-id", req.diaryGuid)
+                    assertEquals(100.0, req.multiplier, 0.001)
+                    assertEquals("0000000000000001", req.unitGuid)
+                    DiaryActionResponse(0, null)
+                }
+                else -> error(method)
+            }
+        }
+        assertEquals(DiaryEditResult.SUCCESS, repo.editFoodEntry("old-id", request))
+        assertEquals(listOf("editFoodstuffUnit"), calls)
+    }
+
+    @Test fun inPlaceEditWithChangedMealAlsoMovesEntry() = runTest {
+        val repo = repository { method, args ->
+            when (method) {
+                "editFoodstuffUnit" -> DiaryActionResponse(0, null)
+                "moveFoodstuffDiary" -> {
+                    assertEquals("old-id", args[0])
+                    assertEquals("3", args[1]) // target meal from request
+                    assertEquals("10.09.2026", args[2])
+                    DiaryActionResponse(0, null)
+                }
+                else -> error(method)
+            }
+        }
+        assertEquals(DiaryEditResult.SUCCESS, repo.editFoodEntry("old-id", request, currentMealTimeId = "1", currentDate = "10.09.2026"))
+        assertEquals(listOf("editFoodstuffUnit", "moveFoodstuffDiary"), calls)
+    }
+
+    @Test fun rejectedInPlaceEditFallsBackToAddAndOldEntryDelete() = runTest {
+        val repo = repository { method, args ->
+            when (method) {
+                "editFoodstuffUnit" -> DiaryActionResponse(1, "Unit edit not supported")
                 "addFoodstuff" -> AddFoodResponse(0, null)
                 "deleteFoodstuffDiary" -> {
                     assertEquals("old-id", args[0])
@@ -68,15 +103,21 @@ class KalorickeRepositoryTest {
             }
         }
         assertEquals(DiaryEditResult.SUCCESS, repo.editFoodEntry("old-id", request))
-        assertEquals(listOf("addFoodstuff", "deleteFoodstuffDiary"), calls)
+        assertEquals(listOf("editFoodstuffUnit", "addFoodstuff", "deleteFoodstuffDiary"), calls)
     }
 
     @Test fun rejectedOrMalformedAddNeverDeletesOriginal() = runTest {
         for (code in listOf(5, null)) {
             calls.clear()
-            val repo = repository { _, _ -> AddFoodResponse(code, "Rejected") }
+            val repo = repository { method, _ ->
+                when (method) {
+                    "editFoodstuffUnit" -> DiaryActionResponse(1, "Error")
+                    "addFoodstuff" -> AddFoodResponse(code, "Rejected")
+                    else -> error(method)
+                }
+            }
             assertEquals(DiaryEditResult.ADD_FAILED, repo.editFoodEntry("old", request))
-            assertEquals(listOf("addFoodstuff"), calls)
+            assertEquals(listOf("editFoodstuffUnit", "addFoodstuff"), calls)
         }
     }
 
@@ -84,6 +125,7 @@ class KalorickeRepositoryTest {
         var deleteCode = 9
         val repo = repository { method, _ ->
             when (method) {
+                "editFoodstuffUnit" -> DiaryActionResponse(1, "Error")
                 "addFoodstuff" -> AddFoodResponse(0, null)
                 "deleteFoodstuffDiary" -> DiaryActionResponse(deleteCode, "Delete response")
                 else -> error(method)
@@ -98,7 +140,11 @@ class KalorickeRepositoryTest {
 
     @Test fun disconnectedDeleteAlsoReportsPartialEdit() = runTest {
         val repo = repository { method, _ ->
-            if (method == "addFoodstuff") AddFoodResponse(0, null) else throw IOException("offline")
+            when (method) {
+                "editFoodstuffUnit" -> DiaryActionResponse(1, "Error")
+                "addFoodstuff" -> AddFoodResponse(0, null)
+                else -> throw IOException("offline")
+            }
         }
         assertEquals(DiaryEditResult.DELETE_FAILED, repo.editFoodEntry("old", request))
         assertEquals(1, calls.count { it == "addFoodstuff" })

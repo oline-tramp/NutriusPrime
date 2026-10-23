@@ -852,6 +852,39 @@ fun EditFoodDialog(
                     errorMsg = null
 
                     coroutineScope.launch {
+                        val unitGuid = selectedUnit?.id ?: "0000000000000001"
+                        val unitMult = selectedUnit?.multiplier ?: 1.0
+                        val unitTitle = selectedUnit?.title ?: "1 g"
+                        val formattedDate = targetDate.format(formatter)
+
+                        val amountFormatted = if (finalAmount == finalAmount.toInt().toDouble()) {
+                            finalAmount.toInt().toString()
+                        } else {
+                            String.format(Locale.US, "%.2f", finalAmount).trimEnd('0').trimEnd('.')
+                        }
+
+                        val displayUnit = if (unitTitle.equals("1 g", ignoreCase = true)) {
+                            "$amountFormatted g"
+                        } else if (unitTitle.equals("1 ml", ignoreCase = true)) {
+                            "$amountFormatted ml"
+                        } else if (unitTitle.startsWith("1 ") && unitTitle.length > 2) {
+                            "$amountFormatted ${unitTitle.substring(2)}"
+                        } else {
+                            "$amountFormatted x $unitTitle"
+                        }
+
+                        val optimisticFood = food.copy(
+                            title = title,
+                            unit = displayUnit,
+                            energy = if (energyText.isNotBlank()) "${energyText.replace(',', '.')} kcal" else food.energy,
+                            protein = if (proteinText.isNotBlank()) "${proteinText.replace(',', '.')} g" else food.protein,
+                            carbohydrate = if (carbsText.isNotBlank()) "${carbsText.replace(',', '.')} g" else food.carbohydrate,
+                            fat = if (fatText.isNotBlank()) "${fatText.replace(',', '.')} g" else food.fat,
+                            fiber = if (fiberText.isNotBlank()) "${fiberText.replace(',', '.')} g" else food.fiber,
+                            sugar = if (sugarText.isNotBlank()) "${sugarText.replace(',', '.')} g" else food.sugar,
+                            salt = if (saltText.isNotBlank()) "${saltText.replace(',', '.')} g" else food.salt
+                        )
+
                         if (personalMealForm != null && currentMealPortion != null && !hasCustomizedMacros) {
                             if (isClone) {
                                 viewModel.addPersonalMeal(currentMealPortion.request) { success ->
@@ -865,7 +898,10 @@ fun EditFoodDialog(
                             } else {
                                 viewModel.editPersonalMealEntry(
                                     oldEntryId = food.id ?: "",
-                                    request = currentMealPortion.request
+                                    request = currentMealPortion.request,
+                                    targetTimeId = selectedTimeGuid,
+                                    targetDateStr = formattedDate,
+                                    updatedFood = optimisticFood
                                 ) { result ->
                                     isSubmitting = false
                                     when (result) {
@@ -885,7 +921,7 @@ fun EditFoodDialog(
                                 guid = "0",
                                 title = title,
                                 diaryTimeGuid = selectedTimeGuid,
-                                date = targetDate.format(formatter),
+                                date = formattedDate,
                                 energy = formatDouble(energyText.replace(',', '.').toDoubleOrNull()) ?: "0",
                                 energyUnit = "kcal",
                                 detailValues = true,
@@ -905,7 +941,8 @@ fun EditFoodDialog(
                             } else {
                                 viewModel.editCustomFoodEntry(
                                     oldEntryId = food.id ?: "",
-                                    request = customRequest
+                                    request = customRequest,
+                                    updatedFood = optimisticFood
                                 ) { result ->
                                     isSubmitting = false
                                     when (result) {
@@ -916,17 +953,6 @@ fun EditFoodDialog(
                                 }
                             }
                             return@launch
-                        }
-
-                        val unitGuid = selectedUnit?.id ?: "0000000000000001"
-                        val unitMult = selectedUnit?.multiplier ?: 1.0
-                        val unitTitle = selectedUnit?.title ?: "1 g"
-                        val formattedDate = targetDate.format(formatter)
-
-                        val amountFormatted = if (finalAmount == finalAmount.toInt().toDouble()) {
-                            finalAmount.toInt().toString()
-                        } else {
-                            String.format(Locale.US, "%.2f", finalAmount).trimEnd('0').trimEnd('.')
                         }
 
                         val request = AddFoodRequest(
@@ -952,7 +978,10 @@ fun EditFoodDialog(
                         } else {
                             viewModel.editFoodEntry(
                                 oldEntryId = food.id ?: "",
-                                request = request
+                                request = request,
+                                currentMealTimeId = initialMealTimeId,
+                                currentDate = currentDate.format(formatter),
+                                updatedFood = optimisticFood
                             ) { result ->
                                 isSubmitting = false
                                 when (result) {

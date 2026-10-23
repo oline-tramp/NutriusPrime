@@ -213,6 +213,12 @@ data class DiaryActionResponse(
     val message: String?
 )
 
+data class EditDiaryFoodstuffUnitRequest(
+    val diaryGuid: String,
+    val multiplier: Double,
+    val unitGuid: String
+)
+
 data class OwnNutrientItem(
     val code: String?,
     val title: String?,
@@ -364,6 +370,14 @@ interface KalorickeApiService {
         @Path("id") id: String,
         @Path("timeId") timeId: String,
         @Path("date") date: String,
+        @Header("Cookie") cookie: String,
+        @Header("User-Agent") userAgent: String = "Mozilla/5.0 (Linux; Android 14; Pixel 7 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        @Header("Accept") accept: String = "application/json, text/plain, */*"
+    ): DiaryActionResponse
+
+    @POST("user/diary/foodstuff/unit/edit?format=json")
+    suspend fun editFoodstuffUnit(
+        @Body request: EditDiaryFoodstuffUnitRequest,
         @Header("Cookie") cookie: String,
         @Header("User-Agent") userAgent: String = "Mozilla/5.0 (Linux; Android 14; Pixel 7 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
         @Header("Accept") accept: String = "application/json, text/plain, */*"
