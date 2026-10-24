@@ -3,6 +3,7 @@ package com.example.kthealthsync.domain.update
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.util.Log
 import com.example.kthealthsync.BuildConfig
 import com.example.kthealthsync.PreferencesManager
 import com.example.kthealthsync.data.remote.GitHubRelease
@@ -42,7 +43,8 @@ class AppUpdateManager(
     val showPrompt: StateFlow<Boolean> = _showPrompt.asStateFlow()
 
     companion object {
-        private const val CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000L // 24 hours
+        private const val TAG = "AppUpdateManager"
+        private const val CHECK_INTERVAL_MS = 15 * 60 * 1000L // 15 minutes
 
         @Volatile
         private var instance: AppUpdateManager? = null
@@ -61,20 +63,24 @@ class AppUpdateManager(
             if (!force) {
                 val lastCheckTime = preferencesManager.lastUpdateCheckTimeFlow.first()
                 if (System.currentTimeMillis() - lastCheckTime < CHECK_INTERVAL_MS) {
+                    Log.d(TAG, "Skipping update check: last check was ${(System.currentTimeMillis() - lastCheckTime) / 1000}s ago")
                     return@launch
                 }
             }
 
+            Log.d(TAG, "Starting update check (force=$force, currentVersion=$currentVersion)")
             _updateState.value = AppUpdateState.Checking
             try {
                 val response = releaseService.getLatestRelease()
                 if (response.isSuccessful) {
                     val release = response.body()
+                    Log.d(TAG, "Received GitHub release: ${release?.tagName}")
                     preferencesManager.saveLastUpdateCheckTime(System.currentTimeMillis())
 
                     if (release != null && VersionComparator.isNewer(currentVersion, release.tagName)) {
                         val displayVer = VersionComparator.formatDisplayVersion(release.tagName)
                         val downloadUrl = release.apkDownloadUrl
+                        Log.d(TAG, "Newer version available: $displayVer, downloadUrl=$downloadUrl")
                         _updateState.value = AppUpdateState.Available(
                             release = release,
                             displayVersion = displayVer,
@@ -83,21 +89,27 @@ class AppUpdateManager(
 
                         val dismissedTag = preferencesManager.dismissedUpdateTagFlow.first()
                         if (force || dismissedTag != release.tagName) {
+                            Log.d(TAG, "Displaying update prompt banner")
                             _showPrompt.value = true
+                        } else {
+                            Log.d(TAG, "Update prompt dismissed previously for $dismissedTag")
                         }
                     } else {
+                        Log.d(TAG, "App is up to date (current=$currentVersion, remote=${release?.tagName})")
                         _updateState.value = AppUpdateState.UpToDate
                         _showPrompt.value = false
                     }
                 } else if (response.code() == 404) {
-                    // No releases published yet on the repo
+                    Log.d(TAG, "GitHub release 404 (no releases found)")
                     preferencesManager.saveLastUpdateCheckTime(System.currentTimeMillis())
                     _updateState.value = AppUpdateState.UpToDate
                     _showPrompt.value = false
                 } else {
+                    Log.e(TAG, "GitHub release error HTTP ${response.code()}: ${response.message()}")
                     _updateState.value = AppUpdateState.Error("HTTP ${response.code()}: ${response.message()}")
                 }
             } catch (e: Exception) {
+                Log.e(TAG, "Update check failed: ${e.message}", e)
                 _updateState.value = AppUpdateState.Error(e.localizedMessage ?: "Network error")
             }
         }
