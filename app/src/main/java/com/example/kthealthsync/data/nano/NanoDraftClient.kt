@@ -31,9 +31,13 @@ open class NanoDraftClient {
     }
 
     open suspend fun classifyFood(name: String): FoodCategory? = classifyMutex.withLock {
+        classifyFoodInternal(name)
+    }
+
+    private suspend fun classifyFoodInternal(name: String): FoodCategory? {
         val trimmed = name.trim()
-        if (trimmed.isBlank()) return@withLock null
-        try {
+        if (trimmed.isBlank()) return null
+        return try {
             val fullPrompt = buildString {
                 append(CLASSIFY_PROMPT)
                 append("\nFood item: ")
@@ -51,6 +55,45 @@ open class NanoDraftClient {
         } catch (e: Exception) {
             com.example.kthealthsync.DebugLogger.addActionLog("NanoDraft: classify failed for '$trimmed': ${e.message}")
             null
+        }
+    }
+
+    open suspend fun classifyFoodsBatch(names: List<String>): Map<String, FoodCategory> = classifyMutex.withLock {
+        val validNames = names.map { it.trim() }.filter { it.isNotBlank() }.distinct()
+        if (validNames.isEmpty()) return@withLock emptyMap()
+        if (validNames.size == 1) {
+            val single = classifyFoodInternal(validNames.first())
+            return@withLock if (single != null) mapOf(validNames.first() to single) else emptyMap()
+        }
+        try {
+            val fullPrompt = buildString {
+                append(CLASSIFY_BATCH_PROMPT)
+                append("\nFood items:\n")
+                append(com.google.gson.Gson().toJson(validNames))
+            }
+            com.example.kthealthsync.DebugLogger.addActionLog("NanoDraft: batch classifying ${validNames.size} foods")
+            val response = model.generateContent(generateContentRequest(TextPart(fullPrompt)) {
+                temperature = 0f
+                candidateCount = 1
+                maxOutputTokens = 512
+            })
+            val rawResult = response.candidates.firstOrNull()?.text?.trim().orEmpty()
+            com.example.kthealthsync.DebugLogger.addActionLog("NanoDraft: batch response: $rawResult")
+            val parsed = parseBatchClassifyJson(rawResult, validNames)
+            if (parsed.isNotEmpty()) {
+                parsed
+            } else {
+                validNames.mapNotNull { name ->
+                    val cat = classifyFoodInternal(name)
+                    if (cat != null) name to cat else null
+                }.toMap()
+            }
+        } catch (e: Exception) {
+            com.example.kthealthsync.DebugLogger.addActionLog("NanoDraft: batch classify error: ${e.message}")
+            validNames.mapNotNull { name ->
+                val cat = classifyFoodInternal(name)
+                if (cat != null) name to cat else null
+            }.toMap()
         }
     }
 
@@ -160,7 +203,44 @@ open class NanoDraftClient {
             "milk 0.5 l" -> {"items":[{"id":null,"name":"milk","sourceName":"milk","amount":0.5,"unit":"l"}]}
             "груша 160 г" -> {"items":[{"id":null,"name":"груша","sourceName":"груша","amount":160,"unit":"g"}]}
         """.trimIndent()
+
+        val CLASSIFY_BATCH_PROMPT = """
+            Classify each of the given food items into exactly one category:
+            VEGETABLE, FRUIT, SUPPLEMENT, BEVERAGE, OTHER.
+
+            Rules:
+            - VEGETABLE: vegetables, salads, fresh greens, herbs, mushrooms, beans/legumes (fresh, cooked, frozen). Potatoes and starchy tubers must be classified as OTHER.
+            - FRUIT: fresh, frozen, dried fruits and berries. Jams, sweet fruit yogurts, candies, baked goods must be classified as OTHER.
+            - SUPPLEMENT: vitamins, mineral supplements (pills, capsules, tablets, drops, powders - NOT bottled drinking water), omega-3, fish oil, creatine, melatonin, dietary supplements. Protein powder and protein bars must be classified as OTHER.
+            - BEVERAGE: water, mineral water (including Magnesia, Mattoni, etc.), tea, coffee, juice, soda, kombucha, kefir, liquid drinks. Cooking oils, syrups, sauces, soups must be classified as OTHER.
+            - OTHER: all other foods (meat, poultry, fish, dairy, bread, pastries, pasta, potatoes, sweets, snacks, protein powders, soups, composite meals).
+
+            Return ONLY a valid JSON object mapping each food name to its category:
+            {"food name": "CATEGORY"}
+            Without markdown or backticks.
+        """.trimIndent()
     }
+}
+
+fun parseBatchClassifyJson(raw: String, validNames: List<String>): Map<String, FoodCategory> {
+    if (raw.isBlank()) return emptyMap()
+    val start = raw.indexOf('{')
+    val end = raw.lastIndexOf('}')
+    if (start == -1 || end == -1 || end <= start) return emptyMap()
+    val jsonCandidate = raw.substring(start, end + 1).trim()
+    return runCatching {
+        val type = object : com.google.gson.reflect.TypeToken<Map<String, String>>() {}.type
+        val parsedMap: Map<String, String> = com.google.gson.Gson().fromJson(jsonCandidate, type)
+        val result = mutableMapOf<String, FoodCategory>()
+        for ((key, value) in parsedMap) {
+            val matchedName = validNames.find { it.equals(key.trim(), ignoreCase = true) } ?: key.trim()
+            val cat = FoodCategory.entries.firstOrNull { it.name.equals(value.trim(), ignoreCase = true) }
+            if (cat != null) {
+                result[matchedName] = cat
+            }
+        }
+        result
+    }.getOrElse { emptyMap() }
 }
 
 data class CustomFoodParsed(

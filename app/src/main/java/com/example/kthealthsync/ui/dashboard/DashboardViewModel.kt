@@ -123,6 +123,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun refresh(silent: Boolean = false) {
         _isRefreshing.value = true
+        val dateStr = _selectedDate.value.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+        repository.invalidateDiaryCache(dateStr)
         viewModelScope.launch {
             repository.fetchNutrientGoalsFromApi(force = true)
         }
@@ -209,6 +211,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             updateNotificationIfToday(updatedSummary)
         }
 
+        val dateStr = _selectedDate.value.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+        repository.invalidateDiaryCache(dateStr)
         viewModelScope.launch {
             val result = repository.deleteDiaryEntries(targetIds)
             loadDailyData(silent = true)
@@ -225,6 +229,12 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         val targetIds = ids.toSet()
         Log.d("NutriusDrag", "moveEntries called: targetIds=$targetIds, targetTimeId=$targetTimeId, targetDate=$targetDate")
         DebugLogger.addActionLog("moveEntries: $targetIds to meal $targetTimeId, date=$targetDate")
+
+        val dateStr = _selectedDate.value.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+        repository.invalidateDiaryCache(dateStr)
+        if (!targetDate.isNullOrBlank()) {
+            repository.invalidateDiaryCache(targetDate)
+        }
 
         val currentState = _uiState.value
         val isDifferentDay = !targetDate.isNullOrBlank() &&
@@ -293,6 +303,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         request: AddFoodRequest,
         onComplete: ((Boolean) -> Unit)? = null
     ) {
+        val dateStr = _selectedDate.value.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+        repository.invalidateDiaryCache(dateStr)
         viewModelScope.launch {
             try {
                 val addResp = repository.addFoodstuff(request)
@@ -318,6 +330,11 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         targetDateStr: String?,
         updatedFood: Foodstuff
     ) {
+        val dateStr = _selectedDate.value.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+        repository.invalidateDiaryCache(dateStr)
+        if (!targetDateStr.isNullOrBlank()) {
+            repository.invalidateDiaryCache(targetDateStr)
+        }
         val currentState = _uiState.value
         if (currentState is DashboardUiState.Success && currentState.diaryResponse?.data?.times != null) {
             val allTimes = currentState.diaryResponse.data.times
@@ -547,6 +564,11 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         onComplete: ((Boolean) -> Unit)? = null
     ) {
         val dateToUse = targetDate ?: _selectedDate.value.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+        val currentDateStr = _selectedDate.value.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+        repository.invalidateDiaryCache(currentDateStr)
+        if (!targetDate.isNullOrBlank()) {
+            repository.invalidateDiaryCache(targetDate)
+        }
 
         // Optimistic UI update for snappy feedback
         val currentState = _uiState.value
@@ -753,7 +775,14 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         val withMeals = _withMeals.value
         val dateStr = date.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
         val version = DailySummaryRecords.nextVersion()
-        if (!silent) _uiState.value = DashboardUiState.Loading
+
+        val cached = repository.getCachedDailySummary(dateStr)
+        if (cached != null) {
+            _uiState.value = DashboardUiState.Success(cached.first, cached.second)
+            updateNotificationIfToday(cached.first)
+        } else if (!silent) {
+            _uiState.value = DashboardUiState.Loading
+        }
         dailyRequest.launch(
             scope = viewModelScope,
             load = {

@@ -16,6 +16,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.withLock
 
 class KalorickeRepository(
     private val api: KalorickeApiService = RetrofitClient.instance,
@@ -34,6 +35,15 @@ class KalorickeRepository(
     private val recipeDetailsCache = ConcurrentHashMap<String, RecipeData>()
     private val macroCache = ConcurrentHashMap<String, Map<String, Double>>()
     private val categoryMemoryCache = ConcurrentHashMap<String, FoodCategory>()
+
+    private val diaryCacheLock = Any()
+    private val diaryCache = object : LinkedHashMap<String, Pair<DailySummary, DiaryResponse>>(14, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Pair<DailySummary, DiaryResponse>>?): Boolean {
+            return size > 14
+        }
+    }
+
+    private val goalsMutex = kotlinx.coroutines.sync.Mutex()
     
     @Volatile
     private var cachedMealMap: Map<String, String> = emptyMap()
@@ -41,6 +51,22 @@ class KalorickeRepository(
     private var lastMealListFetchTime: Long = 0
     @Volatile
     private var lastGoalsFetchTime: Long = 0
+
+    fun getCachedDailySummary(dateStr: String): Pair<DailySummary, DiaryResponse>? = synchronized(diaryCacheLock) {
+        diaryCache[dateStr]
+    }
+
+    fun putCachedDailySummary(dateStr: String, data: Pair<DailySummary, DiaryResponse>) = synchronized(diaryCacheLock) {
+        diaryCache[dateStr] = data
+    }
+
+    fun invalidateDiaryCache(dateStr: String? = null) = synchronized(diaryCacheLock) {
+        if (dateStr != null) {
+            diaryCache.remove(dateStr)
+        } else {
+            diaryCache.clear()
+        }
+    }
 
     suspend fun getCookie(): String = prefs.cookieFlow.first()
 
@@ -187,10 +213,56 @@ class KalorickeRepository(
             }
         }
 
-        coroutineScope {
-            leafFoods.distinctBy { it.guid ?: it.title ?: it.name ?: it.nazev }.map { food ->
-                async { getFoodCategory(food) }
-            }.awaitAll()
+        val distinctFoods = leafFoods.distinctBy { it.guid ?: it.title ?: it.name ?: it.nazev }
+        val foodsNeedingLookup = distinctFoods.filter { food ->
+            val key = food.guid ?: food.title ?: food.name ?: food.nazev ?: return@filter false
+            categoryMemoryCache[key] == null && prefs.getFoodCategory(key) == null &&
+                FoodHtmlParser.parseCategoryFromUrl(food.url, food.title ?: food.name ?: food.nazev) == null
+        }
+
+        if (foodsNeedingLookup.isNotEmpty()) {
+            coroutineScope {
+                foodsNeedingLookup.map { food ->
+                    async {
+                        val cat = fetchFoodCategoryFromWeb(food)
+                        if (cat != null) {
+                            val key = food.guid ?: food.title ?: food.name ?: food.nazev
+                            if (key != null) {
+                                categoryMemoryCache[key] = cat
+                                prefs.saveFoodCategory(key, cat.name)
+                            }
+                        }
+                    }
+                }.awaitAll()
+            }
+
+            val foodsForNano = foodsNeedingLookup.filter { food ->
+                val key = food.guid ?: food.title ?: food.name ?: food.nazev ?: return@filter false
+                val current = categoryMemoryCache[key] ?: prefs.getFoodCategory(key)?.let { runCatching { FoodCategory.valueOf(it) }.getOrNull() }
+                current == null || current == FoodCategory.OTHER
+            }
+
+            if (foodsForNano.isNotEmpty()) {
+                val names = foodsForNano.mapNotNull { it.title ?: it.name ?: it.nazev }.distinct()
+                try {
+                    val batchResults = activeNanoClient?.classifyFoodsBatch(names) ?: emptyMap()
+                    for ((name, cat) in batchResults) {
+                        for (food in foodsForNano) {
+                            val foodName = food.title ?: food.name ?: food.nazev
+                            if (foodName.equals(name, ignoreCase = true)) {
+                                val key = food.guid ?: food.title ?: food.name ?: food.nazev
+                                if (key != null) {
+                                    categoryMemoryCache[key] = cat
+                                    prefs.saveFoodCategory(key, cat.name)
+                                }
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    DebugLogger.addActionLog("Nano batch classification failed: ${e.message}")
+                }
+            }
         }
 
         var kcal = 0.0; var prot = 0.0; var fat = 0.0; var carb = 0.0
@@ -258,7 +330,9 @@ class KalorickeRepository(
         val enrichedDiaryResponse = diaryResponse.copy(
             data = diaryResponse.data?.copy(times = enrichedTimes)
         )
-        return summary to enrichedDiaryResponse
+        val result = summary to enrichedDiaryResponse
+        putCachedDailySummary(dateStr, result)
+        return result
     }
 
     fun getFoodCategorySync(food: Foodstuff): FoodCategory {
@@ -532,19 +606,19 @@ class KalorickeRepository(
      * directly from Kalorické Tabulky user profile settings API.
      * Uses a 10-minute cache to prevent redundant requests unless force is true.
      */
-    suspend fun fetchNutrientGoalsFromApi(force: Boolean = false): com.example.kthealthsync.domain.model.NutrientGoals? {
+    suspend fun fetchNutrientGoalsFromApi(force: Boolean = false): com.example.kthealthsync.domain.model.NutrientGoals? = goalsMutex.withLock {
         val now = System.currentTimeMillis()
         if (!force && now - lastGoalsFetchTime < 10 * 60 * 1000L) {
-            return prefs.nutrientGoalsFlow.first()
+            return@withLock prefs.nutrientGoalsFlow.first()
         }
 
         val cookie = getCookie()
-        if (cookie.isBlank()) return null
-        return try {
+        if (cookie.isBlank()) return@withLock null
+        return@withLock try {
             val resp = executeWithRetry(operationName = "fetchNutrientGoalsFromApi") { cookieParam ->
                 api.getUserProfileForm(cookieParam)
             }
-            val data = resp.data ?: return null
+            val data = resp.data ?: return@withLock null
 
             lastGoalsFetchTime = now
 

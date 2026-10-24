@@ -427,6 +427,44 @@ class KalorickeRepositoryTest {
         assertEquals(listOf("addCustomFood", "deleteFoodstuffDiary"), calls)
     }
 
+    @Test fun diarySummaryIsCachedAndCanBeInvalidated() = runTest {
+        val dateStr = "20.10.2026"
+        var diaryCalls = 0
+        val repo = repository { method, _ ->
+            when (method) {
+                "getDiary" -> {
+                    diaryCalls++
+                    DiaryResponse(DiaryData(times = listOf(MealTime("1", foodstuff = emptyList()))))
+                }
+                "getMealList" -> MealListResponse(emptyList())
+                else -> error(method)
+            }
+        }
+        assertNull(repo.getCachedDailySummary(dateStr))
+        val first = repo.getEnrichedDailySummary(dateStr, false)
+        assertEquals(1, diaryCalls)
+        val cached = repo.getCachedDailySummary(dateStr)
+        assertNotNull(cached)
+        assertEquals(first.first.date, cached?.first?.date)
+
+        // Invalidate cache
+        repo.invalidateDiaryCache(dateStr)
+        assertNull(repo.getCachedDailySummary(dateStr))
+    }
+
+    @Test fun parseBatchClassifyJsonCorrectlyExtractsCategories() {
+        val json = """
+            {"Avokado": "VEGETABLE", "Jablko": "FRUIT", "Rybí tuk": "SUPPLEMENT", "Sprite": "BEVERAGE", "Chléb": "OTHER"}
+        """.trimIndent()
+        val names = listOf("Avokado", "Jablko", "Rybí tuk", "Sprite", "Chléb")
+        val parsed = com.example.kthealthsync.data.nano.parseBatchClassifyJson(json, names)
+        assertEquals(FoodCategory.VEGETABLE, parsed["Avokado"])
+        assertEquals(FoodCategory.FRUIT, parsed["Jablko"])
+        assertEquals(FoodCategory.SUPPLEMENT, parsed["Rybí tuk"])
+        assertEquals(FoodCategory.BEVERAGE, parsed["Sprite"])
+        assertEquals(FoodCategory.OTHER, parsed["Chléb"])
+    }
+
     private class MemoryPreferences : RepositoryPreferences {
         override val cookieFlow = MutableStateFlow("JSESSIONID=test")
         override val emailFlow = MutableStateFlow("")
