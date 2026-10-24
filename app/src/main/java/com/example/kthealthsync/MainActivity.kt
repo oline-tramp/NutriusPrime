@@ -143,6 +143,7 @@ class MainActivity : ComponentActivity() {
                         val updateManager = remember { AppUpdateManager.getInstance(context) }
                         val updateState by updateManager.updateState.collectAsState()
                         val showUpdatePrompt by updateManager.showPrompt.collectAsState()
+                        val downloadState by updateManager.downloadState.collectAsState()
 
                         LaunchedEffect(Unit) {
                             updateManager.checkForUpdates(force = false)
@@ -315,8 +316,14 @@ class MainActivity : ComponentActivity() {
                             AppUpdatePrompt(
                                 visible = showUpdatePrompt && currentScreen == "dashboard",
                                 version = availableUpdate.displayVersion,
+                                downloadState = downloadState,
                                 onUpdateClick = {
-                                    updateManager.openUpdate(context, availableUpdate.downloadUrl)
+                                    val currentDl = downloadState
+                                    if (currentDl is com.example.kthealthsync.domain.update.DownloadState.ReadyToInstall) {
+                                        updateManager.installApk(context, currentDl.apkFile)
+                                    } else {
+                                        updateManager.downloadAndInstall(context, availableUpdate.downloadUrl, availableUpdate.displayVersion)
+                                    }
                                 },
                                 onDismissClick = {
                                     updateManager.dismissPrompt()

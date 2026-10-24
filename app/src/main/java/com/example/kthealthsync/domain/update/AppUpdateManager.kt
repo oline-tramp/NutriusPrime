@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.util.Log
+import androidx.core.content.FileProvider
 import com.example.kthealthsync.BuildConfig
 import com.example.kthealthsync.PreferencesManager
 import com.example.kthealthsync.data.remote.GitHubRelease
@@ -17,6 +18,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.io.File
+import java.io.IOException
+import java.util.concurrent.TimeUnit
 
 sealed interface AppUpdateState {
     object Idle : AppUpdateState
@@ -28,6 +35,13 @@ sealed interface AppUpdateState {
     ) : AppUpdateState
     object UpToDate : AppUpdateState
     data class Error(val message: String?) : AppUpdateState
+}
+
+sealed interface DownloadState {
+    object Idle : DownloadState
+    data class Downloading(val progressPercent: Int) : DownloadState
+    data class ReadyToInstall(val apkFile: File) : DownloadState
+    data class Error(val message: String) : DownloadState
 }
 
 class AppUpdateManager(
@@ -42,28 +56,41 @@ class AppUpdateManager(
     private val _showPrompt = MutableStateFlow(false)
     val showPrompt: StateFlow<Boolean> = _showPrompt.asStateFlow()
 
+    private val _downloadState = MutableStateFlow<DownloadState>(DownloadState.Idle)
+    val downloadState: StateFlow<DownloadState> = _downloadState.asStateFlow()
+
     init {
         scope.launch {
             try {
                 val cachedTag = preferencesManager.cachedUpdateTagFlow.first()
                 val cachedUrl = preferencesManager.cachedUpdateUrlFlow.first()
                 val dismissedTag = preferencesManager.dismissedUpdateTagFlow.first()
-                if (cachedTag.isNotBlank() && VersionComparator.isNewer(currentVersion, cachedTag)) {
-                    val displayVer = VersionComparator.formatDisplayVersion(cachedTag)
-                    _updateState.value = AppUpdateState.Available(
-                        release = GitHubRelease(
-                            tagName = cachedTag,
-                            name = null,
-                            body = null,
-                            htmlUrl = cachedUrl,
-                            publishedAt = null,
-                            assets = null
-                        ),
-                        displayVersion = displayVer,
-                        downloadUrl = cachedUrl
-                    )
-                    if (dismissedTag != cachedTag) {
-                        _showPrompt.value = true
+
+                if (cachedTag.isNotBlank()) {
+                    if (VersionComparator.isNewer(currentVersion, cachedTag)) {
+                        val displayVer = VersionComparator.formatDisplayVersion(cachedTag)
+                        _updateState.value = AppUpdateState.Available(
+                            release = GitHubRelease(
+                                tagName = cachedTag,
+                                name = null,
+                                body = null,
+                                htmlUrl = cachedUrl,
+                                publishedAt = null,
+                                assets = null
+                            ),
+                            displayVersion = displayVer,
+                            downloadUrl = cachedUrl
+                        )
+                        if (dismissedTag != cachedTag) {
+                            _showPrompt.value = true
+                        }
+                    } else {
+                        // Already updated to this version or newer! Clear cache and banner
+                        Log.d(TAG, "Cached update $cachedTag already installed (current=$currentVersion). Clearing cache.")
+                        preferencesManager.saveCachedUpdate("", "")
+                        preferencesManager.saveDismissedUpdateTag("")
+                        _updateState.value = AppUpdateState.UpToDate
+                        _showPrompt.value = false
                     }
                 }
             } catch (e: Exception) {
@@ -157,7 +184,98 @@ class AppUpdateManager(
         }
     }
 
-    fun openUpdate(context: Context, downloadUrl: String) {
+    fun downloadAndInstall(context: Context, downloadUrl: String, displayVersion: String) {
+        if (_downloadState.value is DownloadState.Downloading) return
+
+        scope.launch {
+            _downloadState.value = DownloadState.Downloading(0)
+            try {
+                val updatesDir = File(context.cacheDir, "updates").apply { mkdirs() }
+                // Clean up any old downloaded APK files
+                updatesDir.listFiles()?.forEach { it.delete() }
+
+                val targetFile = File(updatesDir, "NutriusPrime-$displayVersion.apk")
+                Log.d(TAG, "Downloading $downloadUrl to ${targetFile.absolutePath}")
+
+                val client = OkHttpClient.Builder()
+                    .connectTimeout(30, TimeUnit.SECONDS)
+                    .readTimeout(60, TimeUnit.SECONDS)
+                    .followRedirects(true)
+                    .build()
+
+                val request = Request.Builder()
+                    .url(downloadUrl)
+                    .header("User-Agent", "NutriusPrime-Android")
+                    .build()
+
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        throw IOException("HTTP ${response.code}: ${response.message}")
+                    }
+                    val body = response.body ?: throw IOException("Empty response body")
+                    val contentLength = body.contentLength()
+
+                    body.byteStream().use { input ->
+                        targetFile.outputStream().use { output ->
+                            val buffer = ByteArray(8192)
+                            var bytesRead: Int
+                            var totalBytesRead = 0L
+                            var lastReportedPercent = -1
+
+                            while (input.read(buffer).also { bytesRead = it } != -1) {
+                                output.write(buffer, 0, bytesRead)
+                                totalBytesRead += bytesRead
+                                if (contentLength > 0) {
+                                    val percent = ((totalBytesRead * 100) / contentLength).toInt().coerceIn(0, 100)
+                                    if (percent != lastReportedPercent) {
+                                        lastReportedPercent = percent
+                                        _downloadState.value = DownloadState.Downloading(percent)
+                                    }
+                                }
+                            }
+                            output.flush()
+                        }
+                    }
+                }
+
+                Log.d(TAG, "Download finished successfully, launching installer")
+                _downloadState.value = DownloadState.ReadyToInstall(targetFile)
+
+                withContext(Dispatchers.Main) {
+                    installApk(context, targetFile)
+                    // Hide the prompt once installation is started
+                    _showPrompt.value = false
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Native download failed", e)
+                _downloadState.value = DownloadState.Error(e.localizedMessage ?: "Download failed")
+                withContext(Dispatchers.Main) {
+                    // Fallback to browser if native streaming failed
+                    openUpdateInBrowser(context, downloadUrl)
+                }
+            }
+        }
+    }
+
+    fun installApk(context: Context, apkFile: File) {
+        try {
+            val apkUri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                apkFile
+            )
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(apkUri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to launch package installer", e)
+        }
+    }
+
+    fun openUpdateInBrowser(context: Context, downloadUrl: String) {
         try {
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl)).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK

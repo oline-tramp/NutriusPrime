@@ -147,6 +147,9 @@ data class AppStrings(
     val checkingForUpdates: String,
     val appUpToDate: String,
     val updateCheckFailed: String,
+    val downloadingUpdate: String,
+    val downloadFailed: String,
+    val installAction: String,
 
     // Share & Validation
     val shareDayTitle: String,
@@ -293,6 +296,9 @@ val RuStrings = AppStrings(
     checkingForUpdates = "Проверка обновлений...",
     appUpToDate = "Установлена последняя версия",
     updateCheckFailed = "Не удалось проверить обновления",
+    downloadingUpdate = "Скачивание обновления...",
+    downloadFailed = "Ошибка скачивания обновления",
+    installAction = "Установить",
 
     shareDayTitle = "Поделиться данными дня",
     invalidAmountError = "Введите корректное количество",
@@ -437,6 +443,9 @@ val CsStrings = AppStrings(
     checkingForUpdates = "Kontrola aktualizací...",
     appUpToDate = "Máte nejnovější verzi",
     updateCheckFailed = "Nepodařilo se zkontrolovat aktualizace",
+    downloadingUpdate = "Stahování aktualizace...",
+    downloadFailed = "Stahování se nezdařilo",
+    installAction = "Nainstalovat",
 
     shareDayTitle = "Sdílet data dne",
     invalidAmountError = "Zadejte platné množství",
@@ -581,6 +590,9 @@ val EnStrings = AppStrings(
     checkingForUpdates = "Checking for updates...",
     appUpToDate = "You have the latest version",
     updateCheckFailed = "Failed to check for updates",
+    downloadingUpdate = "Downloading update...",
+    downloadFailed = "Download failed",
+    installAction = "Install",
 
     shareDayTitle = "Share daily data",
     invalidAmountError = "Enter a valid amount",

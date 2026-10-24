@@ -22,11 +22,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.kthealthsync.domain.model.LocalAppStrings
+import com.example.kthealthsync.domain.update.DownloadState
 
 @Composable
 fun AppUpdatePrompt(
     visible: Boolean,
     version: String,
+    downloadState: DownloadState,
     onUpdateClick: () -> Unit,
     onDismissClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -83,7 +85,11 @@ fun AppUpdatePrompt(
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = strings.updateAvailableSubtitle,
+                            text = if (downloadState is DownloadState.Downloading) {
+                                "${strings.downloadingUpdate} ${downloadState.progressPercent}%"
+                            } else {
+                                strings.updateAvailableSubtitle
+                            },
                             fontSize = 12.sp,
                             color = Color.LightGray,
                             lineHeight = 16.sp
@@ -93,40 +99,55 @@ fun AppUpdatePrompt(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    TextButton(
-                        onClick = onDismissClick,
-                        colors = ButtonDefaults.textButtonColors(contentColor = Color.Gray)
+                if (downloadState is DownloadState.Downloading) {
+                    LinearProgressIndicator(
+                        progress = { downloadState.progressPercent / 100f },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(6.dp),
+                        color = Color(0xFF64FFDA),
+                        trackColor = Color(0xFF2A2A2A),
+                    )
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(strings.laterAction, fontSize = 13.sp)
-                    }
+                        TextButton(
+                            onClick = onDismissClick,
+                            colors = ButtonDefaults.textButtonColors(contentColor = Color.Gray)
+                        ) {
+                            Text(strings.laterAction, fontSize = 13.sp)
+                        }
 
-                    Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
 
-                    Button(
-                        onClick = onUpdateClick,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF64FFDA),
-                            contentColor = Color(0xFF121212)
-                        ),
-                        shape = RoundedCornerShape(10.dp),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Download,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = strings.updateAction,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp
-                        )
+                        Button(
+                            onClick = onUpdateClick,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF64FFDA),
+                                contentColor = Color(0xFF121212)
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Download,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (downloadState is DownloadState.ReadyToInstall) {
+                                    strings.installAction
+                                } else {
+                                    strings.updateAction
+                                },
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                        }
                     }
                 }
             }

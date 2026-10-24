@@ -29,6 +29,7 @@ import com.example.kthealthsync.domain.model.LocalAppStrings
 import com.example.kthealthsync.domain.model.NutrientGoals
 import com.example.kthealthsync.domain.update.AppUpdateManager
 import com.example.kthealthsync.domain.update.AppUpdateState
+import com.example.kthealthsync.domain.update.DownloadState
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -230,11 +231,18 @@ fun SettingsScreen(
 
             val updateManager = remember { AppUpdateManager.getInstance(context) }
             val updateState by updateManager.updateState.collectAsState()
+            val downloadState by updateManager.downloadState.collectAsState()
 
             SettingSectionHeader(strings.updateSectionHeader)
             val updateSubtitle = when (val state = updateState) {
                 is AppUpdateState.Checking -> strings.checkingForUpdates
-                is AppUpdateState.Available -> String.format(strings.updateAvailableTitle, state.displayVersion)
+                is AppUpdateState.Available -> {
+                    when (val dl = downloadState) {
+                        is DownloadState.Downloading -> "${strings.downloadingUpdate} ${dl.progressPercent}%"
+                        is DownloadState.ReadyToInstall -> strings.installAction
+                        else -> String.format(strings.updateAvailableTitle, state.displayVersion)
+                    }
+                }
                 is AppUpdateState.UpToDate -> strings.appUpToDate
                 is AppUpdateState.Error -> strings.updateCheckFailed
                 AppUpdateState.Idle -> strings.checkForUpdates
@@ -246,36 +254,57 @@ fun SettingsScreen(
                 onClick = {
                     val state = updateState
                     if (state is AppUpdateState.Available) {
-                        updateManager.openUpdate(context, state.downloadUrl)
+                        val dl = downloadState
+                        if (dl is DownloadState.ReadyToInstall) {
+                            updateManager.installApk(context, dl.apkFile)
+                        } else {
+                            updateManager.downloadAndInstall(context, state.downloadUrl, state.displayVersion)
+                        }
                     } else {
                         updateManager.checkForUpdates(force = true)
                     }
                 },
                 trailingContent = {
-                    when (val state = updateState) {
-                        is AppUpdateState.Checking -> {
-                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                        }
-                        is AppUpdateState.Available -> {
-                            Button(
-                                onClick = { updateManager.openUpdate(context, state.downloadUrl) },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFF64FFDA),
-                                    contentColor = Color(0xFF121212)
-                                ),
-                                shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                            ) {
-                                Text(strings.updateAction, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    if (downloadState is DownloadState.Downloading) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    } else {
+                        when (val state = updateState) {
+                            is AppUpdateState.Checking -> {
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                             }
-                        }
-                        else -> {
-                            OutlinedButton(
-                                onClick = { updateManager.checkForUpdates(force = true) },
-                                shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                            ) {
-                                Text(strings.checkForUpdates, fontSize = 12.sp)
+                            is AppUpdateState.Available -> {
+                                Button(
+                                    onClick = {
+                                        val dl = downloadState
+                                        if (dl is DownloadState.ReadyToInstall) {
+                                            updateManager.installApk(context, dl.apkFile)
+                                        } else {
+                                            updateManager.downloadAndInstall(context, state.downloadUrl, state.displayVersion)
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFF64FFDA),
+                                        contentColor = Color(0xFF121212)
+                                    ),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    val buttonText = if (downloadState is DownloadState.ReadyToInstall) {
+                                        strings.installAction
+                                    } else {
+                                        strings.updateAction
+                                    }
+                                    Text(buttonText, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
+                            }
+                            else -> {
+                                OutlinedButton(
+                                    onClick = { updateManager.checkForUpdates(force = true) },
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Text(strings.checkForUpdates, fontSize = 12.sp)
+                                }
                             }
                         }
                     }
