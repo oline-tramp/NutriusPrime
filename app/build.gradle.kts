@@ -17,20 +17,36 @@ android {
     }
 
     signingConfigs {
-        create("shared") {
-            storeFile = rootProject.file("debug.keystore")
-            storePassword = "android"
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
+        create("release") {
+            val customPath = System.getenv("RELEASE_KEYSTORE_PATH")
+            val defaultPath = System.getProperty("user.home") + "/.android/nutrius_release.jks"
+            val keystoreFile = if (customPath != null) file(customPath) else file(defaultPath)
+
+            if (keystoreFile.exists()) {
+                storeFile = keystoreFile
+                storePassword = System.getenv("RELEASE_KEYSTORE_PASSWORD")
+                    ?: file(System.getProperty("user.home") + "/.android/nutrius_release.pass").takeIf { it.exists() }?.readText()?.trim()
+                    ?: "android"
+                keyAlias = System.getenv("RELEASE_KEY_ALIAS") ?: "nutrius_key"
+                keyPassword = System.getenv("RELEASE_KEY_PASSWORD")
+                    ?: file(System.getProperty("user.home") + "/.android/nutrius_release.pass").takeIf { it.exists() }?.readText()?.trim()
+                    ?: "android"
+            }
         }
     }
 
     buildTypes {
         debug {
-            signingConfig = signingConfigs.getByName("shared")
+            val releaseSigning = signingConfigs.getByName("release")
+            if (releaseSigning.storeFile?.exists() == true) {
+                signingConfig = releaseSigning
+            }
         }
         release {
-            signingConfig = signingConfigs.getByName("shared")
+            val releaseSigning = signingConfigs.getByName("release")
+            if (releaseSigning.storeFile?.exists() == true) {
+                signingConfig = releaseSigning
+            }
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }

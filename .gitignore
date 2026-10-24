@@ -29,3 +29,7 @@ mise.toml
 nano-debug/
 scripts/
 docs/
+
+# Signing keys
+*.keystore
+*.jks
