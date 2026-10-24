@@ -17,6 +17,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.health.connect.client.PermissionController
@@ -35,6 +36,9 @@ import com.example.kthealthsync.ui.login.LoginScreen
 import com.example.kthealthsync.ui.search.SearchViewModel
 import com.example.kthealthsync.ui.search.SearchScreen
 import com.example.kthealthsync.ui.settings.SettingsScreen
+import com.example.kthealthsync.domain.update.AppUpdateManager
+import com.example.kthealthsync.domain.update.AppUpdateState
+import com.example.kthealthsync.ui.update.AppUpdatePrompt
 import kotlinx.coroutines.launch
 import java.time.format.DateTimeFormatter
 
@@ -135,6 +139,14 @@ class MainActivity : ComponentActivity() {
                         var initialSearchBarcode by remember { mutableStateOf<String?>(null) }
                         val selectedDate by dashboardViewModel.selectedDate.collectAsState()
                         val dashboardUiState by dashboardViewModel.uiState.collectAsState()
+
+                        val updateManager = remember { AppUpdateManager.getInstance(context) }
+                        val updateState by updateManager.updateState.collectAsState()
+                        val showUpdatePrompt by updateManager.showPrompt.collectAsState()
+
+                        LaunchedEffect(Unit) {
+                            updateManager.checkForUpdates(force = false)
+                        }
 
                         val pendingAction by pendingIntentAction.collectAsState()
                         LaunchedEffect(pendingAction) {
@@ -295,6 +307,21 @@ class MainActivity : ComponentActivity() {
                                         currentScreen = "settings"
                                     }
                                 }
+                            )
+                        }
+
+                        val availableUpdate = updateState as? AppUpdateState.Available
+                        if (availableUpdate != null) {
+                            AppUpdatePrompt(
+                                visible = showUpdatePrompt && currentScreen == "dashboard",
+                                version = availableUpdate.displayVersion,
+                                onUpdateClick = {
+                                    updateManager.openUpdate(context, availableUpdate.downloadUrl)
+                                },
+                                onDismissClick = {
+                                    updateManager.dismissPrompt()
+                                },
+                                modifier = Modifier.align(Alignment.BottomCenter)
                             )
                         }
                     }

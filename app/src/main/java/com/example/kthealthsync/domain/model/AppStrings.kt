@@ -137,6 +137,17 @@ data class AppStrings(
     val dailyNotificationLabel: String,
     val dailyNotificationSub: String,
 
+    // App Updates
+    val updateSectionHeader: String,
+    val updateAvailableTitle: String,
+    val updateAvailableSubtitle: String,
+    val updateAction: String,
+    val laterAction: String,
+    val checkForUpdates: String,
+    val checkingForUpdates: String,
+    val appUpToDate: String,
+    val updateCheckFailed: String,
+
     // Share & Validation
     val shareDayTitle: String,
     val invalidAmountError: String,
@@ -273,6 +284,16 @@ val RuStrings = AppStrings(
     dailyNotificationLabel = "Уведомление с прогрессом",
     dailyNotificationSub = "Закреплённый прогресс калорий и БЖУ в шторке с быстрыми действиями",
 
+    updateSectionHeader = "Обновления",
+    updateAvailableTitle = "Доступно обновление %s",
+    updateAvailableSubtitle = "Нажмите, чтобы скачать и установить новую версию",
+    updateAction = "Обновить",
+    laterAction = "Позже",
+    checkForUpdates = "Проверить обновления",
+    checkingForUpdates = "Проверка обновлений...",
+    appUpToDate = "Установлена последняя версия",
+    updateCheckFailed = "Не удалось проверить обновления",
+
     shareDayTitle = "Поделиться данными дня",
     invalidAmountError = "Введите корректное количество",
     idNotFoundError = "ID записи не найден",
@@ -407,6 +428,16 @@ val CsStrings = AppStrings(
     dailyNotificationLabel = "Oznámení s průběhem",
     dailyNotificationSub = "Připnutý přehled kalorií a živin v liště s rychlými akcemi",
 
+    updateSectionHeader = "Aktualizace",
+    updateAvailableTitle = "Dostupná aktualizace %s",
+    updateAvailableSubtitle = "Klepnutím stáhněte a nainstalujte novou verzi",
+    updateAction = "Aktualizovat",
+    laterAction = "Později",
+    checkForUpdates = "Zkontrolovat aktualizace",
+    checkingForUpdates = "Kontrola aktualizací...",
+    appUpToDate = "Máte nejnovější verzi",
+    updateCheckFailed = "Nepodařilo se zkontrolovat aktualizace",
+
     shareDayTitle = "Sdílet data dne",
     invalidAmountError = "Zadejte platné množství",
     idNotFoundError = "ID záznamu nebylo nalezeno",
@@ -540,6 +571,16 @@ val EnStrings = AppStrings(
     goalsUpdatedError = "Failed to update goals from KT",
     dailyNotificationLabel = "Daily progress notification",
     dailyNotificationSub = "Pinned calories & macros summary in notification shade with quick actions",
+
+    updateSectionHeader = "Updates",
+    updateAvailableTitle = "Update available %s",
+    updateAvailableSubtitle = "Tap to download and install the new version",
+    updateAction = "Update",
+    laterAction = "Later",
+    checkForUpdates = "Check for updates",
+    checkingForUpdates = "Checking for updates...",
+    appUpToDate = "You have the latest version",
+    updateCheckFailed = "Failed to check for updates",
 
     shareDayTitle = "Share daily data",
     invalidAmountError = "Enter a valid amount",

@@ -5,11 +5,13 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,6 +27,8 @@ import com.example.kthealthsync.domain.model.AppLanguage
 import com.example.kthealthsync.BuildConfig
 import com.example.kthealthsync.domain.model.LocalAppStrings
 import com.example.kthealthsync.domain.model.NutrientGoals
+import com.example.kthealthsync.domain.update.AppUpdateManager
+import com.example.kthealthsync.domain.update.AppUpdateState
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -218,6 +222,62 @@ fun SettingsScreen(
                 trailingContent = {
                     if (isSyncingGoals) {
                         CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                    }
+                }
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = Color(0xFF2A2A2A))
+
+            val updateManager = remember { AppUpdateManager.getInstance(context) }
+            val updateState by updateManager.updateState.collectAsState()
+
+            SettingSectionHeader(strings.updateSectionHeader)
+            val updateSubtitle = when (val state = updateState) {
+                is AppUpdateState.Checking -> strings.checkingForUpdates
+                is AppUpdateState.Available -> String.format(strings.updateAvailableTitle, state.displayVersion)
+                is AppUpdateState.UpToDate -> strings.appUpToDate
+                is AppUpdateState.Error -> strings.updateCheckFailed
+                AppUpdateState.Idle -> strings.checkForUpdates
+            }
+            SettingItem(
+                icon = Icons.Default.SystemUpdate,
+                title = strings.updateSectionHeader,
+                subtitle = updateSubtitle,
+                onClick = {
+                    val state = updateState
+                    if (state is AppUpdateState.Available) {
+                        updateManager.openUpdate(context, state.downloadUrl)
+                    } else {
+                        updateManager.checkForUpdates(force = true)
+                    }
+                },
+                trailingContent = {
+                    when (val state = updateState) {
+                        is AppUpdateState.Checking -> {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        }
+                        is AppUpdateState.Available -> {
+                            Button(
+                                onClick = { updateManager.openUpdate(context, state.downloadUrl) },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF64FFDA),
+                                    contentColor = Color(0xFF121212)
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Text(strings.updateAction, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                        }
+                        else -> {
+                            OutlinedButton(
+                                onClick = { updateManager.checkForUpdates(force = true) },
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Text(strings.checkForUpdates, fontSize = 12.sp)
+                            }
+                        }
                     }
                 }
             )

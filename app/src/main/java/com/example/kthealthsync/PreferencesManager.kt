@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.kthealthsync.domain.model.AppLanguage
@@ -26,6 +27,8 @@ class PreferencesManager(private val context: Context) : com.example.kthealthsyn
         val AUTO_SYNC_ENABLED_KEY = booleanPreferencesKey("auto_sync_enabled")
         val DAILY_NOTIFICATION_ENABLED_KEY = booleanPreferencesKey("daily_notification_enabled")
         val APP_LANGUAGE_KEY = stringPreferencesKey("app_language")
+        val LAST_UPDATE_CHECK_KEY = longPreferencesKey("last_update_check_time")
+        val DISMISSED_UPDATE_TAG_KEY = stringPreferencesKey("dismissed_update_tag")
 
         // Nutritional Goals Keys
         val GOAL_KCAL_KEY = doublePreferencesKey("goal_kcal")
@@ -64,6 +67,8 @@ class PreferencesManager(private val context: Context) : com.example.kthealthsyn
     val appLanguageFlow: Flow<AppLanguage> = context.dataStore.data.map { prefs ->
         AppLanguage.fromCode(prefs[APP_LANGUAGE_KEY])
     }
+    val lastUpdateCheckTimeFlow: Flow<Long> = context.dataStore.data.map { it[LAST_UPDATE_CHECK_KEY] ?: 0L }
+    val dismissedUpdateTagFlow: Flow<String> = context.dataStore.data.map { it[DISMISSED_UPDATE_TAG_KEY] ?: "" }
     val resolvedLanguageFlow: Flow<AppLanguage> = context.dataStore.data.map { prefs ->
         val userChoice = AppLanguage.fromCode(prefs[APP_LANGUAGE_KEY])
         if (userChoice == AppLanguage.AUTO) {
@@ -116,6 +121,14 @@ class PreferencesManager(private val context: Context) : com.example.kthealthsyn
 
     suspend fun saveAppLanguage(language: AppLanguage) {
         context.dataStore.edit { it[APP_LANGUAGE_KEY] = language.code }
+    }
+
+    suspend fun saveLastUpdateCheckTime(timestamp: Long) {
+        context.dataStore.edit { it[LAST_UPDATE_CHECK_KEY] = timestamp }
+    }
+
+    suspend fun saveDismissedUpdateTag(tag: String) {
+        context.dataStore.edit { it[DISMISSED_UPDATE_TAG_KEY] = tag }
     }
 
     override suspend fun saveNutrientGoals(goals: NutrientGoals) {

@@ -1,0 +1,79 @@
+name: Release APK
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag name for the release (e.g. v2.39). Leave empty to use version from build.gradle.kts'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle and validate wrapper
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: '12266719'
+          packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
+          log-accepted-android-sdk-licenses: false
+
+      - name: Determine Release Tag
+        id: release_info
+        run: |
+          INPUT_TAG="${{ inputs.tag_name }}"
+          if [ -n "$INPUT_TAG" ]; then
+            TAG="$INPUT_TAG"
+          elif [ "${{ github.ref_type }}" = "tag" ]; then
+            TAG="${{ github.ref_name }}"
+          else
+            VERSION_NAME=$(grep 'versionName = ' app/build.gradle.kts | head -n1 | sed -E 's/.*versionName = "([^"]+)".*/\1/')
+            TAG="v${VERSION_NAME}"
+          fi
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "Resolved release tag: ${TAG}"
+
+      - name: Build Debug APK
+        run: ./gradlew --no-daemon --stacktrace :app:assembleDebug
+
+      - name: Prepare APK Asset
+        id: prepare_asset
+        run: |
+          TAG="${{ steps.release_info.outputs.tag }}"
+          APK_NAME="NutriusPrime-${TAG}.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "${APK_NAME}"
+          echo "apk_path=${APK_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release_info.outputs.tag }}
+          name: NutriusPrime ${{ steps.release_info.outputs.tag }}
+          files: ${{ steps.prepare_asset.outputs.apk_path }}
+          generate_release_notes: true
+          draft: false
+          prerelease: false
