@@ -123,6 +123,9 @@ data class AppStrings(
     val customFoodAiError: String,
     val proportionalLinked: String,
     val proportionalUnlinked: String,
+    val customizeNutritionLabel: String,
+    val collapseNutritionLabel: String,
+    val customMacrosBadge: String,
 
     // Settings
     val settingsTitle: String,
@@ -257,6 +260,9 @@ val RuStrings = AppStrings(
     customFoodAiError = "Не удалось распознать данные из текста",
     proportionalLinked = "Связано",
     proportionalUnlinked = "Раздельно",
+    customizeNutritionLabel = "Настроить БЖУ вручную",
+    collapseNutritionLabel = "Свернуть ручную настройку БЖУ",
+    customMacrosBadge = "Свои БЖУ",
 
     settingsTitle = "Настройки",
     appLanguageLabel = "Язык интерфейса",
@@ -388,6 +394,9 @@ val CsStrings = AppStrings(
     customFoodAiError = "Nepodařilo se rozpoznat data z textu",
     proportionalLinked = "Propojeno",
     proportionalUnlinked = "Odděleně",
+    customizeNutritionLabel = "Upravit živiny ručně",
+    collapseNutritionLabel = "Skrýt ruční úpravu živin",
+    customMacrosBadge = "Vlastní živiny",
 
     settingsTitle = "Nastavení",
     appLanguageLabel = "Jazyk rozhraní",
@@ -519,6 +528,9 @@ val EnStrings = AppStrings(
     customFoodAiError = "Could not parse data from text",
     proportionalLinked = "Linked",
     proportionalUnlinked = "Separate",
+    customizeNutritionLabel = "Customize macros manually",
+    collapseNutritionLabel = "Collapse manual macros",
+    customMacrosBadge = "Custom macros",
 
     settingsTitle = "Settings",
     appLanguageLabel = "App Language",

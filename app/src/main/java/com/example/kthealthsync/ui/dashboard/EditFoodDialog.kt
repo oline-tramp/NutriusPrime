@@ -12,6 +12,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Link
@@ -303,6 +304,7 @@ fun EditFoodDialog(
     val recipeGuid = rawCandidateGuid
     val productGuid = rawCandidateGuid
     val isCustomFood = !isPersonalMealCandidate && (rawCandidateGuid.isBlank() || rawCandidateGuid == "0") && food.url.isNullOrBlank()
+    var isMacroEditExpanded by remember(food) { mutableStateOf(isCustomFood) }
 
     var personalMealForm by remember { mutableStateOf<PersonalMealForm?>(null) }
 
@@ -707,122 +709,225 @@ fun EditFoodDialog(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    text = strings.portionTotal.substringBefore("|").trim(),
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = Color.LightGray
-                                )
-                                IconButton(
-                                    onClick = {
-                                        isLinked = !isLinked
-                                        activeEditingField = null
-                                    },
-                                    modifier = Modifier.size(32.dp)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
-                                    Icon(
-                                        imageVector = if (isLinked) Icons.Default.Link else Icons.Default.LinkOff,
-                                        contentDescription = if (isLinked) strings.proportionalLinked else strings.proportionalUnlinked,
-                                        tint = if (isLinked) MaterialTheme.colorScheme.primary else Color(0xFFAAAAAA),
-                                        modifier = Modifier.size(18.dp)
+                                    Text(
+                                        text = strings.portionTotal.substringBefore("|").trim(),
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color.LightGray
                                     )
+                                    if (hasCustomizedMacros || isCustomFood) {
+                                        Surface(
+                                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                            shape = RoundedCornerShape(4.dp)
+                                        ) {
+                                            Text(
+                                                text = strings.customMacrosBadge,
+                                                fontSize = 10.sp,
+                                                color = MaterialTheme.colorScheme.primary,
+                                                fontWeight = FontWeight.Medium,
+                                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                if (isMacroEditExpanded) {
+                                    IconButton(
+                                        onClick = {
+                                            isLinked = !isLinked
+                                            activeEditingField = null
+                                        },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = if (isLinked) Icons.Default.Link else Icons.Default.LinkOff,
+                                            contentDescription = if (isLinked) strings.proportionalLinked else strings.proportionalUnlinked,
+                                            tint = if (isLinked) MaterialTheme.colorScheme.primary else Color(0xFFAAAAAA),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
                                 }
                             }
 
-                            // Energy (kcal)
-                            OutlinedTextField(
-                                value = energyText,
-                                onValueChange = { onFieldChange("energy", it) },
-                                label = { Text("${strings.energy} (${strings.kcalUnit})") },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            // Protein, Carbs, Fat Row
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                OutlinedTextField(
-                                    value = proteinText,
-                                    onValueChange = { onFieldChange("protein", it) },
-                                    label = { Text("${strings.proteinShort} (g)") },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                                    singleLine = true,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                OutlinedTextField(
-                                    value = carbsText,
-                                    onValueChange = { onFieldChange("carbs", it) },
-                                    label = { Text("${strings.carbsShort} (g)") },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                                    singleLine = true,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                OutlinedTextField(
-                                    value = fatText,
-                                    onValueChange = { onFieldChange("fat", it) },
-                                    label = { Text("${strings.fatShort} (g)") },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                                    singleLine = true,
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-
-                            // Fiber
-                            OutlinedTextField(
-                                value = fiberText,
-                                onValueChange = { onFieldChange("fiber", it) },
-                                label = { Text("${strings.fiberShort} (g)") },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            // More details expander (Sugar, Salt)
+                            // Compact Nutrition Summary Preview
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { showMoreDetails = !showMoreDetails }
+                                    .padding(vertical = 2.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "${energyText.ifBlank { "0" }} ${strings.kcalUnit}",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "${strings.proteinShort}: ${proteinText.ifBlank { "0" }}g",
+                                        fontSize = 12.sp,
+                                        color = Color(0xFF64B5F6)
+                                    )
+                                    Text(
+                                        text = "${strings.carbsShort}: ${carbsText.ifBlank { "0" }}g",
+                                        fontSize = 12.sp,
+                                        color = Color(0xFFFFD54F)
+                                    )
+                                    Text(
+                                        text = "${strings.fatShort}: ${fatText.ifBlank { "0" }}g",
+                                        fontSize = 12.sp,
+                                        color = Color(0xFFFF8A65)
+                                    )
+                                    if (fiberText.isNotBlank() && fiberText != "0") {
+                                        Text(
+                                            text = "${strings.fiberShort}: ${fiberText}g",
+                                            fontSize = 12.sp,
+                                            color = Color(0xFF81C784)
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Spoiler trigger to customize macros
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { isMacroEditExpanded = !isMacroEditExpanded }
                                     .padding(vertical = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text(
-                                    strings.moreDetails,
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Edit,
+                                        contentDescription = null,
+                                        tint = if (isMacroEditExpanded || hasCustomizedMacros) MaterialTheme.colorScheme.primary else Color.Gray,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Text(
+                                        text = if (isMacroEditExpanded) strings.collapseNutritionLabel else strings.customizeNutritionLabel,
+                                        fontSize = 12.sp,
+                                        color = if (isMacroEditExpanded || hasCustomizedMacros) MaterialTheme.colorScheme.primary else Color.Gray,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
                                 Icon(
-                                    imageVector = if (showMoreDetails) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                    imageVector = if (isMacroEditExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
+                                    tint = if (isMacroEditExpanded || hasCustomizedMacros) MaterialTheme.colorScheme.primary else Color.Gray,
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
 
-                            AnimatedVisibility(visible = showMoreDetails) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
+                            AnimatedVisibility(visible = isMacroEditExpanded) {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    // Energy (kcal)
                                     OutlinedTextField(
-                                        value = sugarText,
-                                        onValueChange = { onFieldChange("sugar", it) },
-                                        label = { Text("${strings.sugar} (g)") },
+                                        value = energyText,
+                                        onValueChange = { onFieldChange("energy", it) },
+                                        label = { Text("${strings.energy} (${strings.kcalUnit})") },
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                         singleLine = true,
-                                        modifier = Modifier.weight(1f)
+                                        modifier = Modifier.fillMaxWidth()
                                     )
+
+                                    // Protein, Carbs, Fat Row
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        OutlinedTextField(
+                                            value = proteinText,
+                                            onValueChange = { onFieldChange("protein", it) },
+                                            label = { Text("${strings.proteinShort} (g)") },
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                            singleLine = true,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        OutlinedTextField(
+                                            value = carbsText,
+                                            onValueChange = { onFieldChange("carbs", it) },
+                                            label = { Text("${strings.carbsShort} (g)") },
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                            singleLine = true,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        OutlinedTextField(
+                                            value = fatText,
+                                            onValueChange = { onFieldChange("fat", it) },
+                                            label = { Text("${strings.fatShort} (g)") },
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                            singleLine = true,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+
+                                    // Fiber
                                     OutlinedTextField(
-                                        value = saltText,
-                                        onValueChange = { onFieldChange("salt", it) },
-                                        label = { Text("${strings.salt} (g)") },
+                                        value = fiberText,
+                                        onValueChange = { onFieldChange("fiber", it) },
+                                        label = { Text("${strings.fiberShort} (g)") },
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                         singleLine = true,
-                                        modifier = Modifier.weight(1f)
+                                        modifier = Modifier.fillMaxWidth()
                                     )
+
+                                    // More details expander (Sugar, Salt)
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { showMoreDetails = !showMoreDetails }
+                                            .padding(vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            strings.moreDetails,
+                                            fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                        Icon(
+                                            imageVector = if (showMoreDetails) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+
+                                    AnimatedVisibility(visible = showMoreDetails) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            OutlinedTextField(
+                                                value = sugarText,
+                                                onValueChange = { onFieldChange("sugar", it) },
+                                                label = { Text("${strings.sugar} (g)") },
+                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                                singleLine = true,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            OutlinedTextField(
+                                                value = saltText,
+                                                onValueChange = { onFieldChange("salt", it) },
+                                                label = { Text("${strings.salt} (g)") },
+                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                                singleLine = true,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
