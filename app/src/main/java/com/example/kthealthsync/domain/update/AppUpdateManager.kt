@@ -42,6 +42,36 @@ class AppUpdateManager(
     private val _showPrompt = MutableStateFlow(false)
     val showPrompt: StateFlow<Boolean> = _showPrompt.asStateFlow()
 
+    init {
+        scope.launch {
+            try {
+                val cachedTag = preferencesManager.cachedUpdateTagFlow.first()
+                val cachedUrl = preferencesManager.cachedUpdateUrlFlow.first()
+                val dismissedTag = preferencesManager.dismissedUpdateTagFlow.first()
+                if (cachedTag.isNotBlank() && VersionComparator.isNewer(currentVersion, cachedTag)) {
+                    val displayVer = VersionComparator.formatDisplayVersion(cachedTag)
+                    _updateState.value = AppUpdateState.Available(
+                        release = GitHubRelease(
+                            tagName = cachedTag,
+                            name = null,
+                            body = null,
+                            htmlUrl = cachedUrl,
+                            publishedAt = null,
+                            assets = null
+                        ),
+                        displayVersion = displayVer,
+                        downloadUrl = cachedUrl
+                    )
+                    if (dismissedTag != cachedTag) {
+                        _showPrompt.value = true
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to load cached update", e)
+            }
+        }
+    }
+
     companion object {
         private const val TAG = "AppUpdateManager"
         private const val CHECK_INTERVAL_MS = 15 * 60 * 1000L // 15 minutes
@@ -60,7 +90,7 @@ class AppUpdateManager(
 
     fun checkForUpdates(force: Boolean = false) {
         scope.launch {
-            if (!force) {
+            if (!force && _updateState.value !is AppUpdateState.Idle) {
                 val lastCheckTime = preferencesManager.lastUpdateCheckTimeFlow.first()
                 if (System.currentTimeMillis() - lastCheckTime < CHECK_INTERVAL_MS) {
                     Log.d(TAG, "Skipping update check: last check was ${(System.currentTimeMillis() - lastCheckTime) / 1000}s ago")
@@ -81,6 +111,7 @@ class AppUpdateManager(
                         val displayVer = VersionComparator.formatDisplayVersion(release.tagName)
                         val downloadUrl = release.apkDownloadUrl
                         Log.d(TAG, "Newer version available: $displayVer, downloadUrl=$downloadUrl")
+                        preferencesManager.saveCachedUpdate(release.tagName, downloadUrl)
                         _updateState.value = AppUpdateState.Available(
                             release = release,
                             displayVersion = displayVer,
@@ -96,6 +127,7 @@ class AppUpdateManager(
                         }
                     } else {
                         Log.d(TAG, "App is up to date (current=$currentVersion, remote=${release?.tagName})")
+                        preferencesManager.saveCachedUpdate("", "")
                         _updateState.value = AppUpdateState.UpToDate
                         _showPrompt.value = false
                     }

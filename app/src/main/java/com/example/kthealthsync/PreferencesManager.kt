@@ -29,6 +29,8 @@ class PreferencesManager(private val context: Context) : com.example.kthealthsyn
         val APP_LANGUAGE_KEY = stringPreferencesKey("app_language")
         val LAST_UPDATE_CHECK_KEY = longPreferencesKey("last_update_check_time")
         val DISMISSED_UPDATE_TAG_KEY = stringPreferencesKey("dismissed_update_tag")
+        val CACHED_UPDATE_TAG_KEY = stringPreferencesKey("cached_update_tag")
+        val CACHED_UPDATE_URL_KEY = stringPreferencesKey("cached_update_url")
 
         // Nutritional Goals Keys
         val GOAL_KCAL_KEY = doublePreferencesKey("goal_kcal")
@@ -69,6 +71,8 @@ class PreferencesManager(private val context: Context) : com.example.kthealthsyn
     }
     val lastUpdateCheckTimeFlow: Flow<Long> = context.dataStore.data.map { it[LAST_UPDATE_CHECK_KEY] ?: 0L }
     val dismissedUpdateTagFlow: Flow<String> = context.dataStore.data.map { it[DISMISSED_UPDATE_TAG_KEY] ?: "" }
+    val cachedUpdateTagFlow: Flow<String> = context.dataStore.data.map { it[CACHED_UPDATE_TAG_KEY] ?: "" }
+    val cachedUpdateUrlFlow: Flow<String> = context.dataStore.data.map { it[CACHED_UPDATE_URL_KEY] ?: "" }
     val resolvedLanguageFlow: Flow<AppLanguage> = context.dataStore.data.map { prefs ->
         val userChoice = AppLanguage.fromCode(prefs[APP_LANGUAGE_KEY])
         if (userChoice == AppLanguage.AUTO) {
@@ -129,6 +133,13 @@ class PreferencesManager(private val context: Context) : com.example.kthealthsyn
 
     suspend fun saveDismissedUpdateTag(tag: String) {
         context.dataStore.edit { it[DISMISSED_UPDATE_TAG_KEY] = tag }
+    }
+
+    suspend fun saveCachedUpdate(tag: String, url: String) {
+        context.dataStore.edit {
+            it[CACHED_UPDATE_TAG_KEY] = tag
+            it[CACHED_UPDATE_URL_KEY] = url
+        }
     }
 
     override suspend fun saveNutrientGoals(goals: NutrientGoals) {
