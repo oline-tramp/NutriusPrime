@@ -12,12 +12,25 @@ android {
         applicationId = "com.example.kthealthsync"
         minSdk = 26
         targetSdk = 34
-        versionCode = 73
-        versionName = "2.39"
+        versionCode = 74
+        versionName = "2.40"
+    }
+
+    signingConfigs {
+        create("shared") {
+            storeFile = rootProject.file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
     }
 
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("shared")
+        }
         release {
+            signingConfig = signingConfigs.getByName("shared")
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
