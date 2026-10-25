@@ -284,4 +284,23 @@ class AppUpdateManager(
         } catch (_: Exception) {
         }
     }
+
+    fun downloadWearApk(context: Context, downloadUrl: String, displayVersion: String) {
+        try {
+            val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as android.app.DownloadManager
+            val uri = Uri.parse(downloadUrl)
+            val fileName = "NutriusPrime-Wear-$displayVersion.apk"
+            val request = android.app.DownloadManager.Request(uri).apply {
+                setTitle("NutriusPrime Wear $displayVersion")
+                setDescription("Загрузка обновления для часов...")
+                setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_DOWNLOADS, fileName)
+            }
+            dm.enqueue(request)
+            android.widget.Toast.makeText(context, "Скачивание $fileName начато в Загрузки", android.widget.Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            Log.e(TAG, "DownloadManager failed, falling back to browser", e)
+            openUpdateInBrowser(context, downloadUrl)
+        }
+    }
 }

@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.*
@@ -310,6 +311,30 @@ fun SettingsScreen(
                     }
                 }
             )
+
+            val wearUrl = (updateState as? AppUpdateState.Available)?.release?.wearApkDownloadUrl
+            if (wearUrl != null) {
+                val state = updateState as AppUpdateState.Available
+                SettingItem(
+                    icon = Icons.Default.SystemUpdate,
+                    title = "NutriusPrime Wear (${state.displayVersion})",
+                    subtitle = "Скачать APK для часов в папку «Загрузки»",
+                    onClick = {
+                        updateManager.downloadWearApk(context, wearUrl, state.displayVersion)
+                    },
+                    trailingContent = {
+                        OutlinedButton(
+                            onClick = { updateManager.downloadWearApk(context, wearUrl, state.displayVersion) },
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Скачать APK", fontSize = 12.sp)
+                        }
+                    }
+                )
+            }
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = Color(0xFF2A2A2A))
 

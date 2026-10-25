@@ -18,7 +18,10 @@ data class GitHubRelease(
     @SerializedName("assets") val assets: List<GitHubAsset>?
 ) {
     val apkDownloadUrl: String
-        get() = assets?.firstOrNull { it.name.endsWith(".apk", ignoreCase = true) }?.browserDownloadUrl ?: htmlUrl
+        get() = assets?.firstOrNull { it.name.endsWith(".apk", ignoreCase = true) && !it.name.contains("wear", ignoreCase = true) }?.browserDownloadUrl ?: htmlUrl
+
+    val wearApkDownloadUrl: String?
+        get() = assets?.firstOrNull { it.name.contains("wear", ignoreCase = true) && it.name.endsWith(".apk", ignoreCase = true) }?.browserDownloadUrl
 }
 
 data class GitHubAsset(
