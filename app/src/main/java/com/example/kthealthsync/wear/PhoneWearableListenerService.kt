@@ -78,7 +78,13 @@ class PhoneWearableListenerService : WearableListenerService() {
             DebugLogger.addActionLog("Wear add food result sent: success=$isSuccess")
         } catch (e: Exception) {
             DebugLogger.addActionLog("Wear add food failed: ${e.message}")
-            val errorResult = WearAddFoodResult(success = false, message = e.message ?: "Ошибка добавления")
+            val code = (e as? retrofit2.HttpException)?.code()
+            val userMsg = if (code == 302 || code == 401) {
+                "Сессия истекла. Откройте приложение на телефоне"
+            } else {
+                e.message ?: "Ошибка добавления"
+            }
+            val errorResult = WearAddFoodResult(success = false, message = userMsg)
             syncManager.sendResult(
                 senderNodeId,
                 WearSyncConstants.PATH_ADD_FOOD_RESULT,

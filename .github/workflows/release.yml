@@ -64,28 +64,33 @@ jobs:
           echo "${{ secrets.RELEASE_KEYSTORE_PASSWORD }}" > ~/.android/nutrius_release.pass
           chmod 600 ~/.android/nutrius_release.*
 
-      - name: Build Signed Release APK
+      - name: Build Signed Release APKs
         env:
           RELEASE_KEYSTORE_PATH: /home/runner/.android/nutrius_release.jks
           RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
-        run: ./gradlew --no-daemon --stacktrace :app:assembleRelease
+        run: ./gradlew --no-daemon --stacktrace :app:assembleRelease :wear:assembleRelease
 
-      - name: Prepare APK Asset
+      - name: Prepare APK Assets
         id: prepare_asset
         run: |
           TAG="${{ steps.release_info.outputs.tag }}"
           APK_NAME="NutriusPrime-${TAG}.apk"
+          WEAR_APK_NAME="NutriusPrime-Wear-${TAG}.apk"
           cp app/build/outputs/apk/release/app-release.apk "${APK_NAME}"
+          cp wear/build/outputs/apk/release/wear-release.apk "${WEAR_APK_NAME}"
           echo "apk_path=${APK_NAME}" >> $GITHUB_OUTPUT
+          echo "wear_apk_path=${WEAR_APK_NAME}" >> $GITHUB_OUTPUT
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.release_info.outputs.tag }}
           name: NutriusPrime ${{ steps.release_info.outputs.tag }}
-          files: ${{ steps.prepare_asset.outputs.apk_path }}
+          files: |
+            ${{ steps.prepare_asset.outputs.apk_path }}
+            ${{ steps.prepare_asset.outputs.wear_apk_path }}
           generate_release_notes: true
           draft: false
           prerelease: false

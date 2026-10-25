@@ -37,6 +37,8 @@ import kotlin.math.roundToInt
 private const val TAG = "WatchDataManager"
 private const val PREFS_NAME = "nutrius_wear_prefs"
 private const val PREF_COOKIE = "cookie"
+private const val PREF_EMAIL = "email"
+private const val PREF_PASSWORD_HASH = "password_hash"
 private const val PREF_FAVORITES = "favorites_json"
 
 const val KT_USER_AGENT = "Mozilla/5.0 (Linux; Android 14; Pixel 7 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
@@ -224,11 +226,20 @@ class WatchDataManager(private val context: Context) :
                 if (path == WearSyncConstants.PATH_SYNC_DATA) {
                     val dataMapItem = DataMapItem.fromDataItem(event.dataItem)
                     val newCookie = dataMapItem.dataMap.getString(WearSyncConstants.KEY_COOKIE).orEmpty()
+                    val email = dataMapItem.dataMap.getString(WearSyncConstants.KEY_EMAIL).orEmpty()
+                    val passHash = dataMapItem.dataMap.getString(WearSyncConstants.KEY_PASSWORD_HASH).orEmpty()
                     val favJson = dataMapItem.dataMap.getString(WearSyncConstants.KEY_FAVORITES_JSON).orEmpty()
 
+                    val editor = prefs.edit()
                     if (newCookie.isNotBlank()) {
                         _cookie.value = newCookie
-                        prefs.edit().putString(PREF_COOKIE, newCookie).apply()
+                        editor.putString(PREF_COOKIE, newCookie)
+                    }
+                    if (email.isNotBlank()) {
+                        editor.putString(PREF_EMAIL, email)
+                    }
+                    if (passHash.isNotBlank()) {
+                        editor.putString(PREF_PASSWORD_HASH, passHash)
                     }
 
                     if (favJson.isNotBlank()) {
@@ -236,11 +247,12 @@ class WatchDataManager(private val context: Context) :
                             val type = object : TypeToken<List<WearFoodItem>>() {}.type
                             val list: List<WearFoodItem> = gson.fromJson(favJson, type) ?: emptyList()
                             _favoriteFoods.value = list
-                            prefs.edit().putString(PREF_FAVORITES, favJson).apply()
+                            editor.putString(PREF_FAVORITES, favJson)
                         } catch (e: Exception) {
                             Log.e(TAG, "Error parsing favorites JSON", e)
                         }
                     }
+                    editor.apply()
                 }
             }
         }
@@ -270,11 +282,44 @@ class WatchDataManager(private val context: Context) :
         }
     }
 
+    suspend fun attemptAutoLogin(): String? {
+        val email = prefs.getString(PREF_EMAIL, null) ?: return null
+        val passHash = prefs.getString(PREF_PASSWORD_HASH, null) ?: return null
+        if (email.isBlank() || passHash.isBlank()) {
+            Log.w(TAG, "Auto-login skipped: credentials missing on watch")
+            return null
+        }
+
+        return try {
+            Log.i(TAG, "Attempting watch auto-login for $email...")
+            val resp = directApi.login(DirectLoginRequest(email, passHash))
+            if (resp.isSuccessful && resp.body()?.code == 0) {
+                val jsessionCookie = resp.headers().values("Set-Cookie").firstOrNull { it.contains("JSESSIONID") }
+                if (jsessionCookie != null) {
+                    val newCookie = jsessionCookie.substringBefore(";")
+                    _cookie.value = newCookie
+                    prefs.edit().putString(PREF_COOKIE, newCookie).apply()
+                    Log.i(TAG, "Watch auto-login successful, new cookie saved")
+                    newCookie
+                } else {
+                    Log.w(TAG, "Auto-login response missing JSESSIONID cookie")
+                    null
+                }
+            } else {
+                Log.w(TAG, "Auto-login failed: HTTP ${resp.code()}, code=${resp.body()?.code}")
+                null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Auto-login exception: ${e.message}", e)
+            null
+        }
+    }
+
     suspend fun searchFood(query: String): List<WearFoodItem> {
         val trimmed = query.trim()
-        if (trimmed.isBlank()) return emptyList()
+        if (trimmed.length < 2) return emptyList()
 
-        // 1. Try phone first if connected
+        // 1. Try via phone MessageClient first
         try {
             val nodes = nodeClient.connectedNodes.await()
             if (nodes.isNotEmpty()) {
@@ -291,27 +336,36 @@ class WatchDataManager(private val context: Context) :
         }
 
         // 2. Direct API fallback using exact template
-        val currentCookie = _cookie.value
+        var currentCookie = _cookie.value
         if (currentCookie.isNotBlank()) {
-            return try {
-                val apiResults = directApi.searchFood(
-                    query = trimmed,
-                    page = 0,
-                    cookie = currentCookie
-                )
-                apiResults.map {
-                    WearFoodItem(
-                        id = it.id ?: it.url.orEmpty(),
-                        title = it.title ?: "Без названия",
-                        energy = it.value,
-                        unit = it.unit,
-                        url = it.url
+            for (attempt in 1..2) {
+                try {
+                    val apiResults = directApi.searchFood(
+                        query = trimmed,
+                        page = 0,
+                        cookie = currentCookie
                     )
+                    return apiResults.map {
+                        WearFoodItem(
+                            id = it.id ?: it.url.orEmpty(),
+                            title = it.title ?: "Без названия",
+                            energy = it.value,
+                            unit = it.unit,
+                            url = it.url
+                        )
+                    }
+                } catch (e: Exception) {
+                    val code = (e as? HttpException)?.code()
+                    if ((code == 302 || code == 401) && attempt == 1) {
+                        val newCookie = attemptAutoLogin()
+                        if (newCookie != null) {
+                            currentCookie = newCookie
+                            continue
+                        }
+                    }
+                    Log.e(TAG, "Direct search failed (HTTP $code): ${e.message}")
+                    return emptyList()
                 }
-            } catch (e: Exception) {
-                val code = (e as? HttpException)?.code()
-                Log.e(TAG, "Direct search failed (HTTP $code): ${e.message}")
-                emptyList()
             }
         }
 
@@ -337,32 +391,46 @@ class WatchDataManager(private val context: Context) :
         }
 
         // 2. Direct API fallback matching main app AddFoodRequest template
-        val currentCookie = _cookie.value
+        var currentCookie = _cookie.value
         if (currentCookie.isNotBlank()) {
-            return try {
-                val directReq = DirectAddFoodRequest(
-                    guid = request.guid,
-                    title = request.title,
-                    url = request.url,
-                    date = request.date,
-                    multiplier = request.multiplier,
-                    diaryTimeGuid = request.diaryTimeGuid,
-                    unitGuid = request.unitGuid
-                )
-                val resp = directApi.addFoodstuff(directReq, currentCookie)
-                val success = resp.code == 0 || resp.code == 200 || resp.code == null
-                WearAddFoodResult(success, resp.message ?: if (success) "Добавлено!" else "Ошибка ${resp.code}")
-            } catch (e: Exception) {
-                val code = (e as? HttpException)?.code()
-                // KT sometimes responds with HTTP 302 on successful action or redirect
-                if (code == 302) {
-                    val location = (e as? HttpException)?.response()?.headers()?.get("Location")
-                    if (location != null && !location.contains("login")) {
-                        return WearAddFoodResult(true, "Добавлено!")
+            val directReq = DirectAddFoodRequest(
+                guid = request.guid,
+                title = request.title,
+                url = request.url,
+                date = request.date,
+                multiplier = request.multiplier,
+                diaryTimeGuid = request.diaryTimeGuid,
+                unitGuid = request.unitGuid
+            )
+
+            for (attempt in 1..2) {
+                try {
+                    val resp = directApi.addFoodstuff(directReq, currentCookie)
+                    val success = resp.code == 0 || resp.code == 200 || resp.code == null
+                    return WearAddFoodResult(success, resp.message ?: if (success) "Добавлено!" else "Ошибка ${resp.code}")
+                } catch (e: Exception) {
+                    val httpEx = e as? HttpException
+                    val code = httpEx?.code()
+                    if (httpEx != null && (code == 302 || code == 401)) {
+                        val location = httpEx.response()?.headers()?.get("Location")
+                        // If KT redirects anywhere other than login/prihlaseni, it might be an action redirect
+                        if (location != null && !location.contains("login") && !location.contains("prihlaseni")) {
+                            return WearAddFoodResult(true, "Добавлено!")
+                        }
+                        if (attempt == 1) {
+                            Log.w(TAG, "Direct addFood received HTTP 302/401, attempting auto-login...")
+                            val newCookie = attemptAutoLogin()
+                            if (newCookie != null) {
+                                currentCookie = newCookie
+                                continue
+                            }
+                        }
+                        Log.e(TAG, "Direct addFood session expired (HTTP $code)")
+                        return WearAddFoodResult(false, "Сессия истекла. Откройте приложение на телефоне")
                     }
+                    Log.e(TAG, "Direct addFood failed (HTTP $code): ${e.message}")
+                    return WearAddFoodResult(false, e.message ?: "Ошибка соединения")
                 }
-                Log.e(TAG, "Direct addFood failed (HTTP $code): ${e.message}")
-                WearAddFoodResult(false, e.message ?: "Ошибка соединения")
             }
         }
 
@@ -370,19 +438,29 @@ class WatchDataManager(private val context: Context) :
     }
 
     suspend fun getFoodDefaultGrams(guid: String): Int? {
-        val currentCookie = _cookie.value
+        var currentCookie = _cookie.value
         if (currentCookie.isNotBlank()) {
-            return try {
-                val resp = directApi.getFoodForm(guid, currentCookie)
-                val opts = resp.data?.unitOptions ?: emptyList()
-                val nonGram = opts.firstOrNull { it.multiplier != null && it.multiplier != 1.0 }
-                val defaultPortion = nonGram?.multiplier ?: resp.data?.multiplier
-                if (defaultPortion != null && defaultPortion > 0) {
-                    defaultPortion.roundToInt()
-                } else null
-            } catch (e: Exception) {
-                Log.w(TAG, "getFoodDefaultGrams failed: ${e.message}")
-                null
+            for (attempt in 1..2) {
+                try {
+                    val resp = directApi.getFoodForm(guid, currentCookie)
+                    val opts = resp.data?.unitOptions ?: emptyList()
+                    val nonGram = opts.firstOrNull { it.multiplier != null && it.multiplier != 1.0 }
+                    val defaultPortion = nonGram?.multiplier ?: resp.data?.multiplier
+                    return if (defaultPortion != null && defaultPortion > 0) {
+                        defaultPortion.roundToInt()
+                    } else null
+                } catch (e: Exception) {
+                    val code = (e as? HttpException)?.code()
+                    if ((code == 302 || code == 401) && attempt == 1) {
+                        val newCookie = attemptAutoLogin()
+                        if (newCookie != null) {
+                            currentCookie = newCookie
+                            continue
+                        }
+                    }
+                    Log.w(TAG, "getFoodDefaultGrams failed: ${e.message}")
+                    return null
+                }
             }
         }
         return null

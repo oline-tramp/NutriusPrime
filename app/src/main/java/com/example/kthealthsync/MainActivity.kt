@@ -39,7 +39,10 @@ import com.example.kthealthsync.ui.settings.SettingsScreen
 import com.example.kthealthsync.domain.update.AppUpdateManager
 import com.example.kthealthsync.domain.update.AppUpdateState
 import com.example.kthealthsync.ui.update.AppUpdatePrompt
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import com.example.kthealthsync.data.repository.KalorickeRepository
 import java.time.format.DateTimeFormatter
 
 class MainActivity : ComponentActivity() {
@@ -63,6 +66,18 @@ class MainActivity : ComponentActivity() {
             dashboardViewModel.refresh(silent = true)
         } else {
             isFirstLaunch = false
+        }
+        lifecycleScope.launch(Dispatchers.IO) {
+            val cookie = prefs.cookieFlow.first()
+            if (cookie.isNotBlank()) {
+                val repo = KalorickeRepository(prefs = prefs)
+                try {
+                    val frequent = repo.getFrequentFoodstuff(limit = 15)
+                    val favorites = repo.getFavoriteFoodstuff(limit = 15)
+                    val combined = (frequent + favorites).distinctBy { item -> item.id ?: item.url }
+                    com.example.kthealthsync.wear.WearSyncManager(applicationContext).syncDataToWatch(cookie, combined)
+                } catch (_: Exception) {}
+            }
         }
     }
 
