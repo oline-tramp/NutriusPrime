@@ -147,7 +147,6 @@ class WhoopPromptFormatterTest {
         org.junit.Assert.assertTrue(prompt.contains("LOG ONLY MY ACTIVELY TRACKED BEHAVIORS"))
         org.junit.Assert.assertTrue(prompt.contains("STRICTLY DO NOT ADD UNTRACKED BEHAVIORS"))
         org.junit.Assert.assertTrue(prompt.contains("DO NOT ask for confirmation"))
-        org.junit.Assert.assertTrue(prompt.contains("NEGATIVE BEHAVIORS (marked NO)"))
         // Verify totals
         org.junit.Assert.assertTrue(prompt.contains("Calories: 2503 kcal"))
         org.junit.Assert.assertTrue(prompt.contains("Protein: 126 g"))
@@ -155,18 +154,20 @@ class WhoopPromptFormatterTest {
         org.junit.Assert.assertTrue(prompt.contains("Carbohydrates: 282 g"))
         org.junit.Assert.assertTrue(prompt.contains("Fiber: 41 g"))
         org.junit.Assert.assertTrue(prompt.contains("Added Sugar: 112 g"))
+        org.junit.Assert.assertTrue(prompt.contains("Salt: 2.6 g"))
         org.junit.Assert.assertTrue(prompt.contains("Hydration: 14 glasses (3.5 L / 3500 ml"))
         org.junit.Assert.assertTrue(prompt.contains("Fruits and Vegetables: 6 servings (471 g total"))
-        // Verify positive behaviors
-        org.junit.Assert.assertTrue(prompt.contains("Breakfast: YES"))
-        org.junit.Assert.assertTrue(prompt.contains("Caffeine: YES (1 serving(s)"))
-        org.junit.Assert.assertTrue(prompt.contains("Beans & Legumes: YES (75 g"))
-        org.junit.Assert.assertTrue(prompt.contains("Magnesium Supplement: YES"))
-        // Verify negative behaviors
-        org.junit.Assert.assertTrue(prompt.contains("Alcohol: NO (0 drinks consumed)"))
-        org.junit.Assert.assertTrue(prompt.contains("Creatine: NO"))
-        org.junit.Assert.assertTrue(prompt.contains("Omega-3 Supplement: NO"))
-        org.junit.Assert.assertTrue(prompt.contains("Ashwagandha: NO"))
-        org.junit.Assert.assertTrue(prompt.contains("Late Meal / Eating close to bedtime: NO"))
+        org.junit.Assert.assertTrue(prompt.contains("Supplements logged: 2 pcs"))
+        // Verify meals and food log
+        org.junit.Assert.assertTrue(prompt.contains("[Snídaně]"))
+        org.junit.Assert.assertTrue(prompt.contains("Káva espresso (1 x 50 ml) — 5 kcal"))
+        org.junit.Assert.assertTrue(prompt.contains("Ovesné vločky (50 g) — 200 kcal"))
+        org.junit.Assert.assertTrue(prompt.contains("[Oběd]"))
+        org.junit.Assert.assertTrue(prompt.contains("Fazole červené (75 x 1 g) — 120 kcal"))
+        org.junit.Assert.assertTrue(prompt.contains("Magne B6 470mg Sanofi (3 x 1 g)"))
+        // Verify manual category sections are removed
+        org.junit.Assert.assertFalse(prompt.contains("FOOD GROUPS IN WHOOP BEHAVIORS"))
+        org.junit.Assert.assertFalse(prompt.contains("MEAL TIMING & HABITS"))
+        org.junit.Assert.assertFalse(prompt.contains("SUPPLEMENTS & VITAMINS (LOG EXACT VALUE OR LOG NO)"))
     }
 }

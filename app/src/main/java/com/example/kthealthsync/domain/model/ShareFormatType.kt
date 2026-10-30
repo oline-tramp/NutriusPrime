@@ -7,7 +7,7 @@ enum class ShareFormatType(
 ) {
     WHOOP_BEHAVIORS_LLM(
         title = "Журнал Whoop (ИИ)",
-        subtitle = "Промпт для Whoop AI Coach: макросы, привычки, суплементы и Yes/No",
+        subtitle = "Промпт для Whoop AI Coach: инструкция и сводка дня",
         icon = "⚡"
     ),
     HOW_TO_HIT_GOALS_LLM(
